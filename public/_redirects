@@ -1,1 +1,9 @@
-/* /index.html 200
+/login /index.html 200
+/transactions /index.html 200
+/budgets /index.html 200
+/goals /index.html 200
+/goals/* /index.html 200
+/infrastructure /index.html 200
+/plan /index.html 200
+/review /index.html 200
+/settings /index.html 200
