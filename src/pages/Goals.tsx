@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTable, useInsert, useUpdate, useDelete } from '../hooks/useData'
 import type { Goal, Track, Transaction } from '../lib/types'
 import { lkr } from '../lib/format'
+import { Card, EmptyState, PageHeader, ProgressBar, SegmentedControl, TrackChip } from '../components/ui'
 
 export default function Goals() {
-  const { data: goals = [], refetch } = useTable<Goal>('goals', { column: 'title' })
+  const { data: goals = [], isLoading, refetch } = useTable<Goal>('goals', { column: 'title' })
   const { data: tracks = [] } = useTable<Track>('tracks', { column: 'sort' })
   const { data: txs = [] } = useTable<Transaction>('transactions')
   const ins = useInsert('goals')
@@ -14,14 +15,24 @@ export default function Goals() {
   const [title, setTitle] = useState('')
   const [target, setTarget] = useState('')
   const [trackId, setTrackId] = useState('')
+  const [statusF, setStatusF] = useState<'active' | 'done' | 'all'>('active')
+  const [q, setQ] = useState('')
 
-  const savedByGoal = new Map<string, number>()
-  txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => savedByGoal.set(t.goal_id!, (savedByGoal.get(t.goal_id!) ?? 0) + Number(t.amount)))
+  const savedByGoal = useMemo(() => {
+    const map = new Map<string, number>()
+    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + Number(t.amount)))
+    return map
+  }, [txs])
+  const shown = goals.filter(g =>
+    (statusF === 'all' || g.status === statusF) &&
+    (!q || g.title.toLowerCase().includes(q.toLowerCase()))
+  )
 
   return (
-    <div className="space-y-4">
-      <div className="card">
-        <div className="font-semibold mb-2">New goal (versatile — anything)</div>
+    <div>
+      <PageHeader title="Goals" sub="Anything you're working toward — savings, projects, purchases" />
+      <Card className="mb-4">
+        <div className="eyebrow mb-2">New goal</div>
         <form className="flex flex-wrap gap-2" onSubmit={async e => {
           e.preventDefault()
           if (!title.trim()) return alert('Enter a goal title')
@@ -33,33 +44,45 @@ export default function Goals() {
           }
           setTitle(''); setTarget(''); setTrackId(''); refetch()
         }}>
-          <input className="input max-w-[240px]" placeholder="e.g. Workstation fund" value={title} onChange={e => setTitle(e.target.value)} />
-          <input className="input max-w-[160px]" placeholder="Target LKR (optional)" value={target} onChange={e => setTarget(e.target.value)} />
-          <select className="input max-w-[200px]" value={trackId} onChange={e => setTrackId(e.target.value)}><option value="">Track…</option>{tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+          <input className="input flex-1 min-w-[200px]" placeholder="e.g. Workstation fund" value={title} onChange={e => setTitle(e.target.value)} />
+          <input className="input !w-auto" placeholder="Target LKR (optional)" value={target} onChange={e => setTarget(e.target.value)} />
+          <select className="input !w-auto" value={trackId} onChange={e => setTrackId(e.target.value)}><option value="">Track…</option>{tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
           <button className="btn" type="submit">Add goal</button>
         </form>
+      </Card>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <SegmentedControl value={statusF} onChange={setStatusF} options={[{ value: 'active', label: 'Active' }, { value: 'done', label: 'Done' }, { value: 'all', label: 'All' }]} />
+        <input className="input !w-auto flex-1 min-w-[140px]" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
       </div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {goals.map(g => {
-          const saved = savedByGoal.get(g.id) ?? 0
-          const pct = g.target_amount ? Math.min(100, (saved / Number(g.target_amount)) * 100) : 0
-          return (
-            <div key={g.id} className="card">
-              <div className="flex justify-between gap-2"><Link to={`/goals/${g.id}`} className="font-semibold hover:underline">{g.title}</Link><span className="text-xs text-slate-400">{g.status}</span></div>
-              <div className="text-xs text-slate-400">{tracks.find(t => t.id === g.track_id)?.name ?? 'No track'}{g.target_date ? ` · due ${g.target_date}` : ''}</div>
-              <div className="text-sm mt-1">Linked saved {lkr(saved)}{g.target_amount ? ` / ${lkr(g.target_amount)} (${pct.toFixed(0)}%)` : ''}</div>
-              {g.target_amount ? <div className="h-2 bg-white/10 rounded mt-2"><div className="h-2 bg-emerald-400 rounded" style={{ width: `${pct}%` }} /></div> : null}
-              <div className="flex gap-2 mt-3">
-                <select className="input max-w-[140px]" value={g.status} onChange={e => upd.mutate({ id: g.id, patch: { status: e.target.value } })}>
-                  <option value="active">active</option><option value="paused">paused</option><option value="done">done</option><option value="archived">archived</option>
-                </select>
-                <button className="btn-ghost text-xs" onClick={() => { if (confirm('Delete goal? Linked transactions will be unlinked (kept).')) del.mutate(g.id) }}>Delete</button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {goals.length === 0 && <div className="card text-sm text-slate-400">No goals yet. Add your first above — e.g. Emergency 6 months, Workstation, Onemarket MVP.</div>}
+      {isLoading ? (
+        <div className="grid sm:grid-cols-2 gap-3">{[0, 1].map(i => <Card key={i}><div className="skeleton h-20" /></Card>)}</div>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-3">
+          {shown.map(g => {
+            const saved = savedByGoal.get(g.id) ?? 0
+            const pct = g.target_amount ? Math.min(100, (saved / Number(g.target_amount)) * 100) : 0
+            const tr = tracks.find(t => t.id === g.track_id)
+            return (
+              <Card key={g.id} hover>
+                <div className="flex justify-between gap-2">
+                  <Link to={`/goals/${g.id}`} className="font-semibold hover:underline truncate">{g.title}</Link>
+                  <select className="input !w-auto !py-1 text-xs" value={g.status} onChange={e => upd.mutate({ id: g.id, patch: { status: e.target.value } })}>
+                    <option value="active">active</option><option value="paused">paused</option><option value="done">done</option><option value="archived">archived</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {tr ? <TrackChip name={tr.name} color={tr.color} /> : <span className="text-xs text-slate-500">No track</span>}
+                  {g.target_date && <span className="text-xs text-slate-500">due {g.target_date}</span>}
+                  <span className="ml-auto text-xs text-slate-400 tabular-nums">{g.target_amount ? `${lkr(saved)} / ${lkr(g.target_amount)}` : `${lkr(saved)} linked`}</span>
+                </div>
+                {g.target_amount ? <ProgressBar pct={pct} className="mt-2" /> : null}
+                <button className="text-xs text-slate-600 hover:text-red-300 mt-2" onClick={() => { if (confirm('Delete goal? Linked transactions will be unlinked (kept).')) del.mutate(g.id) }}>Delete</button>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+      {!isLoading && shown.length === 0 && <Card className="mt-3"><EmptyState>No goals match. Add your first above — e.g. Emergency 6 months, Workstation, Onemarket MVP.</EmptyState></Card>}
     </div>
   )
 }

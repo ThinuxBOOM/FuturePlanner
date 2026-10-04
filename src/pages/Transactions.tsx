@@ -2,9 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useTable, useInsert, useDelete } from '../hooks/useData'
 import type { Account, Category, Goal, Transaction } from '../lib/types'
 import { lkr, todayISO } from '../lib/format'
+import { Card, EmptyState, PageHeader, SegmentedControl } from '../components/ui'
 
 export default function Transactions() {
-  const { data: txs = [], refetch } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
+  const { data: txs = [], isLoading, refetch } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
   const { data: accounts = [] } = useTable<Account>('accounts', { column: 'name' })
   const { data: cats = [] } = useTable<Category>('categories', { column: 'name' })
   const { data: goals = [] } = useTable<Goal>('goals', { column: 'title' })
@@ -49,13 +50,16 @@ export default function Transactions() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="card">
-        <div className="font-semibold mb-3">Quick add — daily entry</div>
+    <div>
+      <PageHeader title="Transactions" sub="Daily income, expenses and transfers · LKR" />
+      <Card className="mb-4 !border-sky-400/20">
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <span className="eyebrow">Quick add</span>
+          <SegmentedControl value={kind} onChange={setKind} options={[{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }, { value: 'transfer', label: 'Transfer' }]} />
+        </div>
         <form onSubmit={submit} className="grid sm:grid-cols-4 gap-3">
-          <div><div className="label">Type</div><select className="input" value={kind} onChange={e => setKind(e.target.value as 'income' | 'expense' | 'transfer')}><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option></select></div>
           <div><div className="label">Date</div><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
-          <div><div className="label">Amount (LKR)</div><input className="input" inputMode="numeric" placeholder="2500" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div><div className="label">Amount (LKR)</div><input className="input tabular-nums" inputMode="numeric" placeholder="2500" value={amount} onChange={e => setAmount(e.target.value)} /></div>
           <div><div className="label">Account</div><select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}><option value="">—</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
           {kind === 'transfer' ? (
             <div><div className="label">To account</div><select className="input" value={toAccountId} onChange={e => setToAccountId(e.target.value)}><option value="">—</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
@@ -66,17 +70,30 @@ export default function Transactions() {
           <div className="sm:col-span-2"><div className="label">Notes</div><input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. lunch, bus, domain renewal" /></div>
           <div className="flex items-end"><button className="btn w-full" disabled={ins.isPending} type="submit">{ins.isPending ? 'Saving…' : 'Add'}</button></div>
         </form>
-      </div>
-      <div className="card">
-        <div className="flex gap-2 mb-3"><input className="input" placeholder="Search notes/amount…" value={q} onChange={e => setQ(e.target.value)} /><span className="text-xs text-slate-400 self-center">{filtered.length} shown</span></div>
-        <table className="grid"><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th className="text-right">Amount</th><th></th></tr></thead>
-          <tbody>{filtered.map(t => (
-            <tr key={t.id}><td>{t.date}</td><td>{t.kind}</td>
-              <td className="text-slate-300">{acctById.get(t.account_id)?.name}{t.kind === 'transfer' ? ` → ${acctById.get(t.to_account_id ?? '')?.name}` : ` · ${catById.get(t.category_id ?? '')?.name ?? '—'}`}{t.notes ? ` · ${t.notes}` : ''}</td>
-              <td className="text-right">{lkr(t.amount)}</td>
-              <td className="text-right"><button className="btn-ghost text-xs" onClick={() => { if (confirm('Delete?')) del.mutate(t.id) }}>Del</button></td></tr>
-          ))}</tbody></table>
-      </div>
+      </Card>
+      <Card>
+        <div className="flex gap-2 mb-3">
+          <input className="input" placeholder="Search notes/amount…" value={q} onChange={e => setQ(e.target.value)} />
+          <span className="text-xs text-slate-400 self-center whitespace-nowrap tabular-nums">{filtered.length} shown</span>
+        </div>
+        {isLoading ? <div className="skeleton h-24" /> : (
+          <table className="grid">
+            <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th className="!text-right">Amount</th><th /></tr></thead>
+            <tbody>
+              {filtered.map(t => (
+                <tr key={t.id}>
+                  <td className="tabular-nums whitespace-nowrap">{t.date}</td>
+                  <td><span className={`text-xs px-1.5 py-0.5 rounded ${t.kind === 'income' ? 'bg-emerald-400/15 text-emerald-300' : t.kind === 'transfer' ? 'bg-violet-400/15 text-violet-300' : 'bg-white/10 text-slate-300'}`}>{t.kind}</span></td>
+                  <td className="text-slate-300">{acctById.get(t.account_id)?.name}{t.kind === 'transfer' ? ` → ${acctById.get(t.to_account_id ?? '')?.name}` : ` · ${catById.get(t.category_id ?? '')?.name ?? '—'}`}{t.notes ? ` · ${t.notes}` : ''}</td>
+                  <td className="!text-right tabular-nums">{lkr(t.amount)}</td>
+                  <td className="!text-right"><button className="btn-ghost !py-1 text-xs" onClick={() => { if (confirm('Delete?')) del.mutate(t.id) }}>Del</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!isLoading && filtered.length === 0 && <EmptyState>No transactions match.</EmptyState>}
+      </Card>
     </div>
   )
 }

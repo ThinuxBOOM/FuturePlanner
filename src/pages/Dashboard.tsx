@@ -1,14 +1,17 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useTable } from '../hooks/useData'
 import type { Account, Category, Goal, InfraItem, Transaction } from '../lib/types'
 import { lkr, monthKey } from '../lib/format'
+import { Card, EmptyState, PageHeader, ProgressBar, Stat, TrackChip } from '../components/ui'
 
 export default function Dashboard() {
-  const { data: txs = [] } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
+  const { data: txs = [], isLoading } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
   const { data: accounts = [] } = useTable<Account>('accounts', { column: 'name' })
   const { data: goals = [] } = useTable<Goal>('goals', { column: 'title' })
   const { data: infra = [] } = useTable<InfraItem>('infrastructure_items', { column: 'order_n' })
   const { data: cats = [] } = useTable<Category>('categories')
+  const { data: tracks = [] } = useTable<{ id: string; name: string; color: string | null }>('tracks')
 
   const m = useMemo(() => {
     const mk = monthKey().slice(0, 7)
@@ -37,41 +40,103 @@ export default function Dashboard() {
     const runway = avgBurn > 0 ? liquid / avgBurn : 0
     const infraFund = accounts.find(a => a.type === 'infra_fund')
     const emerg = accounts.find(a => a.type === 'emergency')
-    return { inc, exp, save, rate, liquid, avgBurn, runway, infraBal: infraFund ? byAcct.get(infraFund.id) ?? 0 : 0, emergBal: emerg ? byAcct.get(emerg.id) ?? 0 : 0, byAcct, catById: new Map(cats.map(c => [c.id, c])) }
-  }, [txs, accounts, cats])
+    const trackById = new Map(tracks.map(t => [t.id, t]))
+    const catById = new Map(cats.map(c => [c.id, c]))
+    return { inc, exp, save, rate, liquid, avgBurn, runway, infraBal: infraFund ? byAcct.get(infraFund.id) ?? 0 : 0, emergBal: emerg ? byAcct.get(emerg.id) ?? 0 : 0, byAcct, catById, trackById }
+  }, [txs, accounts, cats, tracks])
 
   const activeGoals = goals.filter(g => g.status === 'active').slice(0, 6)
   const nextInfra = infra.filter(i => i.status !== 'purchased').slice(0, 4)
+  const savedByGoal = useMemo(() => {
+    const map = new Map<string, number>()
+    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + Number(t.amount)))
+    return map
+  }, [txs])
 
   return (
-    <div className="space-y-4">
-      <div className="grid sm:grid-cols-4 gap-3">
-        <div className="card"><div className="label">This month income</div><div className="text-xl font-bold text-emerald-300">{lkr(m.inc)}</div></div>
-        <div className="card"><div className="label">This month expenses</div><div className="text-xl font-bold text-red-300">{lkr(m.exp)}</div></div>
-        <div className="card"><div className="label">Saved + rate</div><div className="text-xl font-bold">{lkr(m.save)}</div><div className="text-xs text-slate-400">{m.rate.toFixed(1)}%</div></div>
-        <div className="card"><div className="label">Runway</div><div className="text-xl font-bold">{m.avgBurn > 0 ? `${m.runway.toFixed(1)} mo` : '—'}</div><div className="text-xs text-slate-400">total incl. earmarked {lkr(m.liquid)} / burn {lkr(m.avgBurn)}</div></div>
-      </div>
-      <div className="grid sm:grid-cols-3 gap-3">
-        <div className="card"><div className="label">Infrastructure fund</div><div className="text-lg font-bold">{lkr(m.infraBal)}</div></div>
-        <div className="card"><div className="label">Emergency fund</div><div className="text-lg font-bold">{lkr(m.emergBal)}</div></div>
-        <div className="card"><div className="label">Accounts</div>{accounts.slice(0, 6).map(a => <div key={a.id} className="text-sm flex justify-between"><span>{a.name}</span><span>{lkr(m.byAcct.get(a.id) ?? 0)}</span></div>)}</div>
-      </div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div className="card">
-          <div className="font-semibold mb-2">Active goals ({activeGoals.length})</div>
-          {activeGoals.length === 0 && <p className="text-sm text-slate-400">No active goals. Create one in Goals.</p>}
-          {activeGoals.map(g => <div key={g.id} className="text-sm flex justify-between py-1 border-b border-white/5"><span>{g.title}</span><span className="text-slate-400">{g.target_amount ? lkr(g.target_amount) : '—'}</span></div>)}
+    <div>
+      <PageHeader title="Dashboard" sub="This month at a glance · all figures LKR" />
+      {isLoading ? (
+        <div className="grid sm:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map(i => <Card key={i}><div className="skeleton h-12" /></Card>)}
         </div>
-        <div className="card">
-          <div className="font-semibold mb-2">Next infrastructure</div>
-          {nextInfra.map(i => <div key={i.id} className="text-sm flex justify-between py-1 border-b border-white/5"><span>#{i.order_n} {i.name}</span><span className="text-slate-400">{i.est_min ? `${lkr(i.est_min)}–${lkr(i.est_max)}` : 'TBD'}</span></div>)}
-        </div>
-      </div>
-      <div className="card">
-        <div className="font-semibold mb-2">Recent transactions</div>
-        {txs.slice(0, 8).map(t => <div key={t.id} className="text-sm flex justify-between py-1 border-b border-white/5"><span>{t.date} · {t.kind} · {m.catById.get(t.category_id ?? '')?.name ?? (t.kind === 'transfer' ? 'Transfer' : '—')}</span><span>{lkr(t.amount)}</span></div>)}
-        {txs.length === 0 && <p className="text-sm text-slate-400">No transactions yet. Add your first daily entry in Transactions.</p>}
-      </div>
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-4 gap-3">
+            <Card><Stat label="Month income" value={m.inc} format={lkr} tone="text-emerald-300" /></Card>
+            <Card><Stat label="Month expenses" value={m.exp} format={lkr} tone="text-red-300" /></Card>
+            <Card>
+              <Stat label="Saved" value={m.save} format={lkr} />
+              <div className="text-xs text-slate-400 mt-1">{m.rate.toFixed(1)}% savings rate</div>
+              <ProgressBar pct={Math.max(0, Math.min(100, m.rate))} className="mt-2" />
+            </Card>
+            <Card>
+              <Stat label="Runway" value={m.runway} format={v => (m.avgBurn > 0 ? `${v.toFixed(1)} mo` : '—')} />
+              <div className="text-xs text-slate-400 mt-1">total incl. earmarked {lkr(m.liquid)} / burn {lkr(m.avgBurn)}</div>
+            </Card>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3 mt-3">
+            <Card>
+              <div className="label">Infrastructure fund</div>
+              <div className="stat-num">{lkr(m.infraBal)}</div>
+            </Card>
+            <Card>
+              <div className="label">Emergency fund</div>
+              <div className="stat-num">{lkr(m.emergBal)}</div>
+            </Card>
+            <Card>
+              <div className="label mb-2">Accounts</div>
+              {accounts.slice(0, 6).map(a => (
+                <div key={a.id} className="text-sm flex justify-between py-0.5"><span className="text-slate-300">{a.name}</span><span className="tabular-nums">{lkr(m.byAcct.get(a.id) ?? 0)}</span></div>
+              ))}
+              {accounts.length === 0 && <EmptyState>Sign out and back in to seed default accounts.</EmptyState>}
+            </Card>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3 mt-3">
+            <Card>
+              <div className="font-semibold mb-2">Active goals</div>
+              {activeGoals.length === 0 && <EmptyState>No active goals. <Link className="underline" to="/goals">Create one</Link>.</EmptyState>}
+              {activeGoals.map(g => {
+                const saved = savedByGoal.get(g.id) ?? 0
+                const pct = g.target_amount ? Math.min(100, (saved / Number(g.target_amount)) * 100) : 0
+                const tr = g.track_id ? m.trackById.get(g.track_id) : undefined
+                return (
+                  <div key={g.id} className="py-1.5 border-b border-white/5 last:border-0">
+                    <div className="text-sm flex justify-between gap-2">
+                      <Link to={`/goals/${g.id}`} className="hover:underline truncate">{g.title}</Link>
+                      <span className="text-slate-400 tabular-nums whitespace-nowrap">{g.target_amount ? lkr(g.target_amount) : '—'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      {tr && <TrackChip name={tr.name} color={tr.color} />}
+                      <div className="flex-1"><ProgressBar pct={pct} /></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </Card>
+            <Card>
+              <div className="font-semibold mb-2">Next infrastructure</div>
+              {nextInfra.map(i => (
+                <div key={i.id} className="text-sm flex justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
+                  <span className="truncate">#{i.order_n} {i.name}</span>
+                  <span className="text-slate-400 tabular-nums whitespace-nowrap">{i.est_min ? `${lkr(i.est_min)}–${lkr(i.est_max)}` : 'TBD'}</span>
+                </div>
+              ))}
+              {nextInfra.length === 0 && <EmptyState>Everything acquired. 🎉</EmptyState>}
+            </Card>
+          </div>
+          <Card className="mt-3">
+            <div className="font-semibold mb-2">Recent transactions</div>
+            {txs.slice(0, 8).map(t => (
+              <div key={t.id} className="text-sm flex justify-between gap-2 py-1 border-b border-white/5 last:border-0">
+                <span className="text-slate-300 truncate">{t.date} · {t.kind} · {m.catById.get(t.category_id ?? '')?.name ?? (t.kind === 'transfer' ? 'Transfer' : '—')}</span>
+                <span className="tabular-nums whitespace-nowrap">{lkr(t.amount)}</span>
+              </div>
+            ))}
+            {txs.length === 0 && <EmptyState>No transactions yet. Add your first daily entry in Transactions.</EmptyState>}
+          </Card>
+        </>
+      )}
     </div>
   )
 }

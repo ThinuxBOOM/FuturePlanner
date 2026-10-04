@@ -28,3 +28,13 @@ export interface RecurringRule {
   account_id: UUID | null; to_account_id: UUID | null; category_id: UUID | null; goal_id: UUID | null;
   notes: string | null; freq: string; interval_n: number; next_run: string | null; end_date: string | null; is_active: boolean;
 }
+export type PlanItemStatus = 'todo' | 'doing' | 'blocked' | 'done' | 'skipped'
+export interface PlanItem {
+  id: UUID; user_id: string; stage_id: UUID; track_id: UUID | null; parent_item_id: UUID | null;
+  goal_id: UUID | null; infra_item_id: UUID | null;
+  title: string; detail: string | null; acceptance_criteria: string | null;
+  status: PlanItemStatus; priority: 'p1' | 'p2' | 'p3'; progress_pct: number;
+  effort: 'S' | 'M' | 'L' | null; target_date: string | null; start_date: string | null;
+  completed_at: string | null; is_custom: boolean; source_key: string | null; sort: number; archived: boolean;
+}
+export interface PlanItemLink { id: UUID; user_id: string; from_item_id: UUID; to_item_id: UUID }
