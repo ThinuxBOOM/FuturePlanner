@@ -1,8 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useTable, useInsert, useUpdate, useDelete } from '../hooks/useData'
+import { useTable, useInsert, useUpdate } from '../hooks/useData'
 import type { PlanItem, PlanItemLink, Stage, Track } from '../lib/types'
-import { popNode, drawRail } from '../lib/motion'
-import { Card, EmptyState, PageHeader, ProgressBar, StatusDot, TrackChip } from '../components/ui'
+import { popNode, drawRail, revealList } from '../lib/motion'
+import { ConfirmButton, useUndoDelete } from '../components/feedback'
+import { Card, EmptyState, PageHeader, ProgressBar, StatusDot, TrackChip, useReadyEnter } from '../components/ui'
 
 const NEXT: Record<string, PlanItem['status']> = { todo: 'doing', doing: 'done', done: 'todo', blocked: 'doing', skipped: 'todo' }
 
@@ -14,7 +15,7 @@ function ItemRow({ item, tracks, byId, blockers, onChanged }: {
   onChanged: () => void
 }) {
   const upd = useUpdate('plan_items')
-  const del = useDelete('plan_items')
+  const undoDelete = useUndoDelete('plan_items')
   const insGoal = useInsert('goals')
   const [editing, setEditing] = useState(false)
   const [showAccept, setShowAccept] = useState(false)
@@ -98,7 +99,7 @@ function ItemRow({ item, tracks, byId, blockers, onChanged }: {
         <button className="text-slate-500 hover:text-slate-200" onClick={() => { setF({ title: item.title, detail: item.detail ?? '', accept: item.acceptance_criteria ?? '', priority: item.priority, effort: item.effort ?? '', target: item.target_date ?? '', progress: item.progress_pct }); setEditing(v => !v) }}>edit</button>
         {!item.goal_id && <button className="text-slate-500 hover:text-violet-300" onClick={toGoal}>→ goal</button>}
         <button className="text-slate-500 hover:text-slate-200" onClick={() => upd.mutate({ id: item.id, patch: { status: item.status === 'skipped' ? 'todo' : 'skipped' } })}>{item.status === 'skipped' ? 'unskip' : 'skip'}</button>
-        <button className="text-slate-600 hover:text-red-300" onClick={() => { if (confirm('Delete this roadmap item?')) del.mutate(item.id) }}>delete</button>
+        <ConfirmButton onConfirm={() => undoDelete(item, 'Roadmap item')} />
       </div>
       {editing && (
         <form className="ml-8 mt-2 grid gap-2" onSubmit={async e => {
@@ -129,6 +130,70 @@ function ItemRow({ item, tracks, byId, blockers, onChanged }: {
   )
 }
 
+function StageSection({ s, si, isOpen, isCurrent, onToggle, tracks, byId, blockersOf, onChanged, adding, setAdding, newTitle, setNewTitle, onAdd }: {
+  s: Stage
+  si: PlanItem[]
+  isOpen: boolean
+  isCurrent: boolean
+  onToggle: () => void
+  tracks: Track[]
+  byId: Map<string, PlanItem>
+  blockersOf: Map<string, PlanItem[]>
+  onChanged: () => void
+  adding: string | null
+  setAdding: (v: string | null) => void
+  newTitle: string
+  setNewTitle: (v: string) => void
+  onAdd: (stageId: string) => void
+}) {
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const opened = useRef(false)
+  useLayoutEffect(() => {
+    if (!isOpen) { opened.current = false; return }
+    if (!opened.current) {
+      opened.current = true
+      return revealList(bodyRef.current, '[data-anim="item"]')
+    }
+  }, [isOpen, si.length])
+  const sd = si.filter(i => i.status === 'done').length
+  const pct = si.length ? Math.round((sd / si.length) * 100) : 0
+  return (
+    <div data-anim="card" className="relative pl-8 pb-4">
+      <span className={`absolute left-[9px] top-6 bottom-0 w-[3px] rounded-full origin-top ${isCurrent ? 'bg-gradient-to-b from-sky-400 via-violet-400 to-emerald-400 plan-rail-live' : 'bg-white/10'}`} />
+      <span className={`absolute left-[3px] top-[18px] w-4 h-4 rounded-full border-2 ${pct === 100 ? 'bg-emerald-400 border-emerald-400' : isCurrent ? 'bg-sky-400 border-sky-400' : 'bg-[#131822] border-white/30'}`} />
+      <button onClick={onToggle} aria-expanded={isOpen} className="card card-hover w-full text-left !p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold truncate">{s.title}</div>
+            <div className="text-xs text-slate-400 truncate">{s.timing_text}{s.objective ? ` · ${s.objective}` : ''}</div>
+          </div>
+          <span className="text-xs tabular-nums text-slate-300 whitespace-nowrap">{sd}/{si.length}</span>
+          <span className="w-20 hidden sm:block"><ProgressBar pct={pct} label={`${s.title} progress`} /></span>
+          <span className="text-slate-500">{isOpen ? '▾' : '▸'}</span>
+        </div>
+      </button>
+      <div className={`acc mt-0 ${isOpen ? 'open mt-2' : ''}`}>
+        <div>
+          <div ref={bodyRef} className="space-y-2">
+            {si.map(i => (
+              <ItemRow key={i.id} item={i} tracks={tracks} byId={byId} blockers={blockersOf.get(i.id) ?? []} onChanged={onChanged} />
+            ))}
+            {adding === s.id ? (
+              <form className="flex gap-2" onSubmit={e => { e.preventDefault(); onAdd(s.id) }}>
+                <input autoFocus aria-label="New roadmap item" className="input" placeholder="New roadmap item…" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
+                <button className="btn" type="submit">Add</button>
+                <button className="btn-ghost" type="button" aria-label="Cancel" onClick={() => setAdding(null)}>✕</button>
+              </form>
+            ) : (
+              <button className="btn-ghost text-sm w-full" onClick={() => setAdding(s.id)}>+ Add item to this stage</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Plan() {
   const { data: items = [], isLoading, refetch } = useTable<PlanItem>('plan_items', { column: 'sort' })
   const { data: stages = [] } = useTable<Stage>('stages', { column: 'sort' })
@@ -143,6 +208,7 @@ export default function Plan() {
   const [adding, setAdding] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState('')
   const railRef = useRef<HTMLDivElement | null>(null)
+  const rootRef = useReadyEnter<HTMLDivElement>(!isLoading)
   useLayoutEffect(() => {
     const live = railRef.current?.querySelector('.plan-rail-live')
     if (live instanceof HTMLElement) drawRail(live)
@@ -193,29 +259,39 @@ export default function Plan() {
   }
 
   return (
-    <div>
+    <div ref={rootRef}>
       <PageHeader title="Roadmap" sub="Your 5-year plan as a living checklist — mark done, extend, link to goals" />
-      <Card className="mb-4">
+      <Card className="mb-4 sticky top-[118px] z-[5] !bg-[#131822]/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px]">
             <div className="flex justify-between text-sm mb-1">
               <span className="text-slate-300">Overall progress</span>
               <span className="tabular-nums text-slate-300">{doneCt}/{active.length} · {overall}%</span>
             </div>
-            <ProgressBar pct={overall} color="bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-400" />
+            <ProgressBar pct={overall} color="bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-400" label="Overall roadmap progress" />
           </div>
           {currentStage && <span className="chip !border-sky-400/40 text-sky-300">▶ {currentStage.title}</span>}
         </div>
-        <div className="flex flex-wrap gap-2 mt-3">
-          <select className="input !w-auto" value={trackF} onChange={e => setTrackF(e.target.value)}>
-            <option value="">All tracks</option>
-            {tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <select className="input !w-auto" value={statusF} onChange={e => setStatusF(e.target.value)}>
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          <button onClick={() => setTrackF('')} className={`chip transition-colors ${!trackF ? '!bg-white !text-black !border-white font-medium' : 'hover:bg-white/10'}`}>All</button>
+          {tracks.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTrackF(trackF === t.id ? '' : t.id)}
+              aria-pressed={trackF === t.id}
+              className={`chip transition-colors ${trackF === t.id ? '!bg-white !text-black !border-white font-medium' : 'hover:bg-white/10'}`}
+            >
+              <span className="dot" style={{ background: trackF === t.id ? '#000' : t.color ?? '#64748b' }} />
+              {t.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <select aria-label="Status filter" className="input !w-auto" value={statusF} onChange={e => setStatusF(e.target.value)}>
             <option value="">All statuses</option>
             {['todo', 'doing', 'blocked', 'done', 'skipped'].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <input className="input !w-auto flex-1 min-w-[140px]" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
+          <input aria-label="Search roadmap" className="input !w-auto flex-1 min-w-[140px]" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </Card>
 
@@ -224,42 +300,14 @@ export default function Plan() {
         {[...stages].sort((a, b) => a.sort - b.sort).map(s => {
           const si = visible.filter(i => i.stage_id === s.id)
           if (si.length === 0) return null
-          const sd = si.filter(i => i.status === 'done').length
-          const pct = Math.round((sd / si.length) * 100)
-          const isOpen = !!open[s.id]
-          const isCurrent = currentStage?.id === s.id
           return (
-            <div key={s.id} data-anim="card" className="relative pl-8 pb-4">
-              <span className={`absolute left-[9px] top-6 bottom-0 w-[3px] rounded-full origin-top ${isCurrent ? 'bg-gradient-to-b from-sky-400 via-violet-400 to-emerald-400 plan-rail-live' : 'bg-white/10'}`} />
-              <span className={`absolute left-[3px] top-[18px] w-4 h-4 rounded-full border-2 ${pct === 100 ? 'bg-emerald-400 border-emerald-400' : isCurrent ? 'bg-sky-400 border-sky-400' : 'bg-[#131822] border-white/30'}`} />
-              <button onClick={() => setOpen(o => ({ ...o, [s.id]: !o[s.id] }))} className="card card-hover w-full text-left !p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{s.title}</div>
-                    <div className="text-xs text-slate-400 truncate">{s.timing_text}{s.objective ? ` · ${s.objective}` : ''}</div>
-                  </div>
-                  <span className="text-xs tabular-nums text-slate-300 whitespace-nowrap">{sd}/{si.length}</span>
-                  <span className="w-20 hidden sm:block"><ProgressBar pct={pct} /></span>
-                  <span className="text-slate-500">{isOpen ? '▾' : '▸'}</span>
-                </div>
-              </button>
-              {isOpen && (
-                <div className="mt-2 space-y-2">
-                  {si.map(i => (
-                    <ItemRow key={i.id} item={i} tracks={tracks} byId={byId} blockers={blockersOf.get(i.id) ?? []} onChanged={refetch} />
-                  ))}
-                  {adding === s.id ? (
-                    <form className="flex gap-2" onSubmit={e => { e.preventDefault(); add(s.id) }}>
-                      <input autoFocus className="input" placeholder="New roadmap item…" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
-                      <button className="btn" type="submit">Add</button>
-                      <button className="btn-ghost" type="button" onClick={() => setAdding(null)}>✕</button>
-                    </form>
-                  ) : (
-                    <button className="btn-ghost text-sm w-full" onClick={() => setAdding(s.id)}>+ Add item to this stage</button>
-                  )}
-                </div>
-              )}
-            </div>
+            <StageSection
+              key={s.id} s={s} si={si}
+              isOpen={!!open[s.id]} isCurrent={currentStage?.id === s.id}
+              onToggle={() => setOpen(o => ({ ...o, [s.id]: !o[s.id] }))}
+              tracks={tracks} byId={byId} blockersOf={blockersOf} onChanged={refetch}
+              adding={adding} setAdding={setAdding} newTitle={newTitle} setNewTitle={setNewTitle} onAdd={add}
+            />
           )
         })}
       </div>

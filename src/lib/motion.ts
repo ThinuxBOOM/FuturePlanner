@@ -18,24 +18,34 @@ function safeRevert(a: { revert?: () => void; cancel?: () => void }): Cleanup {
   }
 }
 
+function scoped(root: HTMLElement | null, sel: string): Element[] {
+  if (!root) return []
+  return Array.from(root.querySelectorAll(`:scope ${sel}`))
+}
+
 /**
- * Page entrance timeline: [data-anim="header"] first, then [data-anim="card"] staggered.
- * Call inside useLayoutEffect (runs before paint, so no flash).
+ * Page entrance timeline, scoped to root: [data-anim="header"] first, then
+ * [data-anim="card"] staggered. Call once data is ready (see useReadyEnter),
+ * otherwise it plays on skeletons and real cards mount un-animated.
  */
 export function pageEnter(root: HTMLElement | null): Cleanup {
   if (!root || !motionOK()) return () => {}
+  const header = scoped(root, '[data-anim="header"]')
+  const cards = scoped(root, '[data-anim="card"]')
+  if (header.length === 0 && cards.length === 0) return () => {}
   const tl = createTimeline({ defaults: { ease: 'outExpo' } })
-  tl.add('[data-anim="header"]', { y: [14, 0], opacity: [0, 1], duration: 450 })
-  tl.add('[data-anim="card"]', { y: [18, 0], opacity: [0, 1], duration: 600, delay: stagger(60) }, '-=300')
+  if (header.length > 0) tl.add(header, { y: [14, 0], opacity: [0, 1], duration: 450 })
+  if (cards.length > 0) tl.add(cards, { y: [18, 0], opacity: [0, 1], duration: 600, delay: stagger(60) }, header.length > 0 ? '-=300' : '+=0')
   return safeRevert(tl)
 }
 
 /**
  * Staggered reveal for list rows/cards matching selector inside container.
+ * Call when the list data is ready or when a section expands.
  */
 export function revealList(container: HTMLElement | null, selector = '[data-anim="item"]'): Cleanup {
   if (!container || !motionOK()) return () => {}
-  const items = container.querySelectorAll(selector)
+  const items = Array.from(container.querySelectorAll(selector))
   if (items.length === 0) return () => {}
   const a = animate(items, { y: [16, 0], opacity: [0, 1], duration: 520, delay: stagger(45), ease: 'outExpo' })
   return safeRevert(a)
@@ -103,6 +113,24 @@ export function drawRail(node: HTMLElement | null, duration = 800): Cleanup {
   if (!node || !motionOK()) return () => {}
   const a = animate(node, { scaleY: [0, 1], opacity: [0.3, 1], duration, ease: 'inOutQuad' })
   return safeRevert(a)
+}
+
+/** Draw an SVG line/path by animating stroke-dashoffset. */
+export function drawLine(node: SVGGeometryElement | null, duration = 1100): Cleanup {
+  if (!node) return () => {}
+  try {
+    const len = node.getTotalLength()
+    if (!motionOK()) {
+      node.style.strokeDasharray = 'none'
+      return () => {}
+    }
+    node.style.strokeDasharray = `${len}`
+    node.style.strokeDashoffset = `${len}`
+    const a = animate(node, { strokeDashoffset: [len, 0], duration, ease: 'outExpo' })
+    return safeRevert(a)
+  } catch {
+    return () => {}
+  }
 }
 
 /** Stop all animations under a root (route teardown safety net). */

@@ -1,10 +1,29 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { countUp, fillBar, pageEnter } from '../lib/motion'
+import { countUp, fillBar, pageEnter, clearMotion } from '../lib/motion'
 
 /** Wrap a page root to run the entrance timeline once on mount. */
 export function usePageEnter<T extends HTMLElement>() {
   const ref = useRef<T | null>(null)
   useLayoutEffect(() => pageEnter(ref.current), [])
+  return ref
+}
+
+/**
+ * Run the entrance timeline when data is ready, not on mount — otherwise the
+ * stagger plays on skeletons and real cards mount un-animated.
+ */
+export function useReadyEnter<T extends HTMLElement>(ready: boolean) {
+  const ref = useRef<T | null>(null)
+  const fired = useRef(false)
+  useLayoutEffect(() => {
+    if (!ready || fired.current) return
+    fired.current = true
+    const cleanup = pageEnter(ref.current)
+    return () => {
+      cleanup()
+      clearMotion(ref.current)
+    }
+  }, [ready])
   return ref
 }
 
@@ -37,11 +56,12 @@ export function Stat({ label, value, format, tone }: { label: string; value: num
 }
 
 /** Animated fill bar (0–100). */
-export function ProgressBar({ pct, color = 'bg-emerald-400', className = '' }: { pct: number; color?: string; className?: string }) {
+export function ProgressBar({ pct, color = 'bg-emerald-400', className = '', label }: { pct: number; color?: string; className?: string; label?: string }) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const v = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 0))
   useLayoutEffect(() => fillBar(ref.current, pct), [pct])
   return (
-    <div className={`bar ${className}`}>
+    <div className={`bar ${className}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v)} aria-label={label ?? 'progress'}>
       <div ref={ref} className={color} />
     </div>
   )

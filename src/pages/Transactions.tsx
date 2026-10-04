@@ -1,98 +1,124 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { useTable, useInsert, useDelete } from '../hooks/useData'
-import type { Account, Category, Goal, Transaction } from '../lib/types'
-import { lkr, todayISO } from '../lib/format'
-import { Card, EmptyState, PageHeader, SegmentedControl } from '../components/ui'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useTable } from '../hooks/useData'
+import type { Account, Category, Transaction } from '../lib/types'
+import { lkr } from '../lib/format'
+import { revealList } from '../lib/motion'
+import TransactionForm from '../components/TransactionForm'
+import { ConfirmButton, useUndoDelete } from '../components/feedback'
+import { Card, EmptyState, PageHeader, useReadyEnter } from '../components/ui'
+
+const PALETTE = ['#60a5fa', '#f472b6', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#22d3ee', '#fb923c', '#4ade80', '#e879f9', '#facc15', '#94a3b8']
+
+export function catColor(cat: Category, idx: number): string {
+  return cat.color ?? PALETTE[idx % PALETTE.length]
+}
 
 export default function Transactions() {
-  const { data: txs = [], isLoading, refetch } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
+  const rootRef = useReadyEnter<HTMLDivElement>(true)
+  const { data: txs = [], isLoading } = useTable<Transaction>('transactions', { column: 'date', ascending: false })
   const { data: accounts = [] } = useTable<Account>('accounts', { column: 'name' })
   const { data: cats = [] } = useTable<Category>('categories', { column: 'name' })
-  const { data: goals = [] } = useTable<Goal>('goals', { column: 'title' })
-  const ins = useInsert('transactions')
-  const del = useDelete('transactions')
+  const undoDelete = useUndoDelete('transactions')
 
-  const [kind, setKind] = useState<'income' | 'expense' | 'transfer'>('expense')
-  const [date, setDate] = useState(todayISO())
-  const [amount, setAmount] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [toAccountId, setToAccountId] = useState('')
-  const [catId, setCatId] = useState('')
-  const [goalId, setGoalId] = useState('')
-  const [notes, setNotes] = useState('')
   const [q, setQ] = useState('')
+  const [freshId, setFreshId] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
-  const filtered = useMemo(() => {
+  const catById = useMemo(() => new Map(cats.map(c => [c.id, c])), [cats])
+  const colorByCat = useMemo(() => {
+    const m = new Map<string, string>()
+    ;[...cats].sort((a, b) => a.name.localeCompare(b.name)).forEach((c, i) => m.set(c.id, catColor(c, i)))
+    return m
+  }, [cats])
+  const acctById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+
+  const groups = useMemo(() => {
     const s = q.toLowerCase()
-    return txs.filter(t => !s || (t.notes ?? '').toLowerCase().includes(s) || String(t.amount).includes(s)).slice(0, 200)
+    const list = txs.filter(t => !s || (t.notes ?? '').toLowerCase().includes(s) || String(t.amount).includes(s)).slice(0, 300)
+    const g = new Map<string, Transaction[]>()
+    for (const t of list) {
+      const arr = g.get(t.date) ?? []
+      arr.push(t)
+      g.set(t.date, arr)
+    }
+    return [...g.entries()].map(([date, rows]) => ({
+      date,
+      rows,
+      inc: rows.filter(r => r.kind === 'income').reduce((a, r) => a + Number(r.amount), 0),
+      exp: rows.filter(r => r.kind === 'expense').reduce((a, r) => a + Number(r.amount), 0),
+    }))
   }, [txs, q])
 
-  const catById = new Map(cats.map(c => [c.id, c]))
-  const acctById = new Map(accounts.map(a => [a.id, a]))
+  useLayoutEffect(() => {
+    if (!isLoading && groups.length > 0) return revealList(listRef.current, '[data-tx]')
+  }, [isLoading, q])
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!amount || Number.isNaN(Number(amount)) || Number(amount) <= 0 || !accountId) return alert('Enter a valid amount (>0) + account')
-    if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return alert('Pick a different destination account')
-    if (kind !== 'transfer' && !catId) return alert('Pick a category')
-    try {
-      await ins.mutateAsync({
-        date, kind, amount: Number(amount), account_id: accountId,
-        to_account_id: kind === 'transfer' ? toAccountId : null,
-        category_id: kind === 'transfer' ? null : catId || null,
-        goal_id: goalId || null, notes: notes || null
-      })
-    } catch (err) {
-      return alert(err instanceof Error ? err.message : 'Save failed')
-    }
-    setAmount(''); setNotes(''); setGoalId('')
-    refetch()
+  function detail(t: Transaction): string {
+    const acct = acctById.get(t.account_id)?.name ?? '—'
+    if (t.kind === 'transfer') return `${acct} → ${acctById.get(t.to_account_id ?? '')?.name ?? '—'}`
+    return `${acct} · ${catById.get(t.category_id ?? '')?.name ?? '—'}`
   }
 
   return (
-    <div>
+    <div ref={rootRef}>
       <PageHeader title="Transactions" sub="Daily income, expenses and transfers · LKR" />
       <Card className="mb-4 !border-sky-400/20">
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          <span className="eyebrow">Quick add</span>
-          <SegmentedControl value={kind} onChange={setKind} options={[{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }, { value: 'transfer', label: 'Transfer' }]} />
-        </div>
-        <form onSubmit={submit} className="grid sm:grid-cols-4 gap-3">
-          <div><div className="label">Date</div><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
-          <div><div className="label">Amount (LKR)</div><input className="input tabular-nums" inputMode="numeric" placeholder="2500" value={amount} onChange={e => setAmount(e.target.value)} /></div>
-          <div><div className="label">Account</div><select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}><option value="">—</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-          {kind === 'transfer' ? (
-            <div><div className="label">To account</div><select className="input" value={toAccountId} onChange={e => setToAccountId(e.target.value)}><option value="">—</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-          ) : (
-            <div><div className="label">Category ({kind})</div><select className="input" value={catId} onChange={e => setCatId(e.target.value)}><option value="">—</option>{cats.filter(c => c.kind === kind).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          )}
-          <div><div className="label">Goal link (optional)</div><select className="input" value={goalId} onChange={e => setGoalId(e.target.value)}><option value="">—</option>{goals.filter(g => g.status === 'active').map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select></div>
-          <div className="sm:col-span-2"><div className="label">Notes</div><input className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. lunch, bus, domain renewal" /></div>
-          <div className="flex items-end"><button className="btn w-full" disabled={ins.isPending} type="submit">{ins.isPending ? 'Saving…' : 'Add'}</button></div>
-        </form>
+        <div className="eyebrow mb-3">Quick add</div>
+        <TransactionForm onSaved={id => setFreshId(id)} />
       </Card>
       <Card>
-        <div className="flex gap-2 mb-3">
-          <input className="input" placeholder="Search notes/amount…" value={q} onChange={e => setQ(e.target.value)} />
-          <span className="text-xs text-slate-400 self-center whitespace-nowrap tabular-nums">{filtered.length} shown</span>
+        <div className="flex gap-2 mb-1">
+          <input aria-label="Search transactions" className="input" placeholder="Search notes/amount…" value={q} onChange={e => setQ(e.target.value)} />
         </div>
-        {isLoading ? <div className="skeleton h-24" /> : (
-          <table className="grid">
-            <thead><tr><th>Date</th><th>Type</th><th>Detail</th><th className="!text-right">Amount</th><th /></tr></thead>
-            <tbody>
-              {filtered.map(t => (
-                <tr key={t.id}>
-                  <td className="tabular-nums whitespace-nowrap">{t.date}</td>
-                  <td><span className={`text-xs px-1.5 py-0.5 rounded ${t.kind === 'income' ? 'bg-emerald-400/15 text-emerald-300' : t.kind === 'transfer' ? 'bg-violet-400/15 text-violet-300' : 'bg-white/10 text-slate-300'}`}>{t.kind}</span></td>
-                  <td className="text-slate-300">{acctById.get(t.account_id)?.name}{t.kind === 'transfer' ? ` → ${acctById.get(t.to_account_id ?? '')?.name}` : ` · ${catById.get(t.category_id ?? '')?.name ?? '—'}`}{t.notes ? ` · ${t.notes}` : ''}</td>
-                  <td className="!text-right tabular-nums">{lkr(t.amount)}</td>
-                  <td className="!text-right"><button className="btn-ghost !py-1 text-xs" onClick={() => { if (confirm('Delete?')) del.mutate(t.id) }}>Del</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {isLoading ? <div className="skeleton h-24 mt-2" /> : (
+          <div ref={listRef}>
+            {groups.map(g => (
+              <div key={g.date} className="mt-3 first:mt-1">
+                <div className="flex justify-between items-baseline py-1.5 border-b border-white/10">
+                  <span className="text-sm font-semibold">{g.date}</span>
+                  <span className="text-xs tabular-nums">
+                    {g.inc > 0 && <span className="text-pos mr-2">+{lkr(g.inc)}</span>}
+                    {g.exp > 0 && <span className="text-neg">−{lkr(g.exp)}</span>}
+                    {g.inc === 0 && g.exp === 0 && <span className="text-slate-500">transfers only</span>}
+                  </span>
+                </div>
+                {/* desktop table */}
+                <table className="grid hidden md:table">
+                  <tbody>
+                    {g.rows.map(t => (
+                      <tr key={t.id} data-tx className={t.id === freshId ? 'bg-sky-400/10' : ''}>
+                        <td className="!border-0">
+                          <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${t.kind === 'income' ? 'bg-emerald-400/15 text-emerald-300' : t.kind === 'transfer' ? 'bg-violet-400/15 text-violet-300' : 'bg-white/10 text-slate-300'}`}>{t.kind}</span>
+                          {t.kind !== 'transfer' && t.category_id && <span className="dot mr-2" style={{ background: colorByCat.get(t.category_id) }} />}
+                          <span className="text-slate-300">{detail(t)}{t.notes ? ` · ${t.notes}` : ''}</span>
+                        </td>
+                        <td className="!border-0 !text-right tabular-nums whitespace-nowrap">{lkr(t.amount)}</td>
+                        <td className="!border-0 !text-right"><ConfirmButton onConfirm={() => undoDelete(t, 'Transaction')} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* mobile cards */}
+                <div className="md:hidden">
+                  {g.rows.map(t => (
+                    <div key={t.id} data-tx className={`flex items-center gap-2 py-2 border-b border-white/5 ${t.id === freshId ? 'bg-sky-400/10 rounded-lg px-2' : ''}`}>
+                      {t.kind !== 'transfer' && t.category_id
+                        ? <span className="dot !w-2.5 !h-2.5 shrink-0" style={{ background: colorByCat.get(t.category_id) }} />
+                        : <span className={`text-[10px] px-1 rounded shrink-0 ${t.kind === 'transfer' ? 'bg-violet-400/15 text-violet-300' : 'bg-emerald-400/15 text-emerald-300'}`}>{t.kind === 'transfer' ? '⇄' : '+'}</span>}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate">{detail(t)}</div>
+                        {t.notes && <div className="text-xs text-slate-500 truncate">{t.notes}</div>}
+                      </div>
+                      <span className="text-sm tabular-nums whitespace-nowrap">{lkr(t.amount)}</span>
+                      <ConfirmButton onConfirm={() => undoDelete(t, 'Transaction')} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {groups.length === 0 && <EmptyState>No transactions match.</EmptyState>}
+          </div>
         )}
-        {!isLoading && filtered.length === 0 && <EmptyState>No transactions match.</EmptyState>}
       </Card>
     </div>
   )
