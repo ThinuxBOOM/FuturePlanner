@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTable, useInsert, useUpdate } from '../hooks/useData'
 import type { Goal, Track, Transaction } from '../lib/types'
 import { lkr } from '../lib/format'
+import { fmtMinor, tm } from '../lib/money'
 import { useToast, ConfirmButton, useUndoDelete } from '../components/feedback'
 import { Card, EmptyState, PageHeader, ProgressBar, SegmentedControl, TrackChip, useReadyEnter } from '../components/ui'
 
@@ -23,7 +24,7 @@ export default function Goals() {
 
   const savedByGoal = useMemo(() => {
     const map = new Map<string, number>()
-    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + Number(t.amount)))
+    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + tm(t)))
     return map
   }, [txs])
   // Projected monthly linked-income rate per goal → ETA text
@@ -37,10 +38,10 @@ export default function Goals() {
     }
     for (const g of goals) {
       if (!g.target_amount) { map.set(g.id, ''); continue }
-      const perMonth = months.map(k => txs.filter(t => t.goal_id === g.id && t.kind === 'income' && t.date.slice(0, 7) === k).reduce((s, t) => s + Number(t.amount), 0))
+      const perMonth = months.map(k => txs.filter(t => t.goal_id === g.id && t.kind === 'income' && t.date.slice(0, 7) === k).reduce((s, t) => s + tm(t), 0))
       const avg = perMonth.reduce((a, b) => a + b, 0) / months.length
       const saved = savedByGoal.get(g.id) ?? 0
-      const left = Number(g.target_amount) - saved
+      const left = Math.round(Number(g.target_amount) * 100) - saved
       if (left <= 0) { map.set(g.id, 'funded'); continue }
       if (avg <= 0) { map.set(g.id, 'no pace yet'); continue }
       const eta = new Date(now.getFullYear(), now.getMonth() + Math.ceil(left / avg), 1)
@@ -87,7 +88,7 @@ export default function Goals() {
         <div className="grid sm:grid-cols-2 gap-3">
           {shown.map(g => {
             const saved = savedByGoal.get(g.id) ?? 0
-            const pct = g.target_amount ? Math.min(100, (saved / Number(g.target_amount)) * 100) : 0
+            const pct = g.target_amount ? Math.min(100, (saved / (Number(g.target_amount) * 100)) * 100) : 0
             const tr = tracks.find(t => t.id === g.track_id)
             const eta = etaByGoal.get(g.id)
             const r = 15.5
@@ -108,14 +109,14 @@ export default function Goals() {
                       </select>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      {tr ? <TrackChip name={tr.name} color={tr.color} /> : <span className="text-xs text-slate-500">No track</span>}
-                      {eta && <span className="text-xs text-slate-500 truncate">{eta}</span>}
+                      {tr ? <TrackChip name={tr.name} color={tr.color} /> : <span className="text-xs text-[#7d8b82]">No track</span>}
+                      {eta && <span className="text-xs text-[#7d8b82] truncate">{eta}</span>}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   <div className="flex-1"><ProgressBar pct={pct} label={`${g.title} progress`} /></div>
-                  <span className="text-xs text-slate-400 tabular-nums whitespace-nowrap">{g.target_amount ? `${lkr(saved)} / ${lkr(g.target_amount)}` : `${lkr(saved)} linked`}</span>
+                  <span className="text-xs text-[#7d8b82] tabular-nums whitespace-nowrap">{g.target_amount ? `${fmtMinor(saved)} / ${lkr(g.target_amount)}` : `${fmtMinor(saved)} linked`}</span>
                 </div>
                 <div className="mt-2"><ConfirmButton onConfirm={() => undoDelete(g, 'Goal')} /></div>
               </Card>

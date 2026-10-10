@@ -9,11 +9,12 @@ export interface Goal {
   status: 'active' | 'paused' | 'done' | 'archived'; priority: string; progress_mode: string;
 }
 export interface Milestone { id: UUID; user_id: string; goal_id: UUID; title: string; due_date: string | null; amount: number | null; is_done: boolean; done_at: string | null; sort: number }
-export interface Account { id: UUID; user_id: string; name: string; type: string; opening_balance: number; currency: string; is_archived: boolean }
+export interface Account { id: UUID; user_id: string; name: string; type: string; opening_balance: number; currency: string; is_archived: boolean; opening_date: string | null; limit_minor: number | null; rate: number | null; statement_minor: number | null; minimum_minor: number | null }
 export interface Category { id: UUID; user_id: string; kind: 'income' | 'expense'; name: string; icon: string | null; color: string | null; is_archived: boolean }
 export interface Transaction {
-  id: UUID; user_id: string; date: string; kind: 'income' | 'expense' | 'transfer';
-  amount: number; account_id: UUID; to_account_id: UUID | null;
+  id: UUID; user_id: string; date: string; kind: 'income' | 'expense' | 'transfer' | 'refund' | 'payment';
+  amount: number; amount_minor: number | null; interest_minor: number | null;
+  account_id: UUID; to_account_id: UUID | null;
   category_id: UUID | null; goal_id: UUID | null; notes: string | null;
 }
 export interface Budget { id: UUID; user_id: string; month: string; category_id: UUID; planned_amount: number; rollover: boolean; notes: string | null }

@@ -50,24 +50,24 @@ function ItemRow({ item, tracks, byId, blockers, onChanged }: {
   const blocked = blockers.some(b => b.status !== 'done')
 
   return (
-    <div data-anim="item" className={`rounded-xl border p-3 transition-colors ${item.status === 'done' ? 'border-emerald-400/20 bg-emerald-400/5' : blocked ? 'border-red-400/25 bg-red-400/5' : 'border-white/10 bg-black/20'}`}>
+    <div data-anim="item" className={`rounded-xl border p-3 transition-colors ${item.status === 'done' ? 'border-emerald-400/20 bg-emerald-400/5' : blocked ? 'border-red-400/25 bg-red-400/5' : 'border-[#e1e6dc] bg-[#f8faf6]'}`}>
       <div className="flex items-center gap-2">
         <button
           onClick={cycle}
           title={`Status: ${item.status} — click to advance`}
-          className="shrink-0 w-6 h-6 rounded-full border border-white/25 grid place-items-center hover:border-white/60"
+          className="shrink-0 w-6 h-6 rounded-full border border-[#cdd6c9] grid place-items-center hover:border-[#93a48f]"
         >
-          <span ref={dotRef} className={`dot ${item.status === 'done' ? '!w-3 !h-3 bg-emerald-400' : item.status === 'doing' ? 'bg-sky-400' : item.status === 'blocked' ? 'bg-red-400' : item.status === 'skipped' ? 'bg-slate-600' : 'bg-transparent border border-white/30'}`} />
+          <span ref={dotRef} className={`dot ${item.status === 'done' ? '!w-3 !h-3 bg-emerald-400' : item.status === 'doing' ? 'bg-sky-400' : item.status === 'blocked' ? 'bg-red-400' : item.status === 'skipped' ? 'bg-slate-600' : 'bg-transparent border border-[#c2cdbd]'}`} />
         </button>
-        <span className={`flex-1 text-sm font-medium ${item.status === 'done' ? 'line-through text-slate-400' : ''}`}>{item.title}</span>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.priority === 'p1' ? 'bg-red-400/15 text-red-300' : item.priority === 'p3' ? 'bg-slate-500/15 text-slate-400' : 'bg-sky-400/10 text-sky-300'}`}>{item.priority.toUpperCase()}</span>
-        {item.effort && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-slate-300">{item.effort}</span>}
+        <span className={`flex-1 text-sm font-medium ${item.status === 'done' ? 'line-through text-[#7d8b82]' : ''}`}>{item.title}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${item.priority === 'p1' ? 'bg-red-400/15 text-[#ad5347]' : item.priority === 'p3' ? 'bg-slate-500/15 text-[#7d8b82]' : 'bg-sky-400/10 text-[#2b7a9e]'}`}>{item.priority.toUpperCase()}</span>
+        {item.effort && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#eef1eb] text-[#43564a]">{item.effort}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-2 ml-8">
         {track && <TrackChip name={track.name} color={track.color} />}
-        {item.target_date && <span className="text-xs text-slate-400">due {item.target_date}</span>}
+        {item.target_date && <span className="text-xs text-[#7d8b82]">due {item.target_date}</span>}
         {item.status === 'doing' && (
-          <span className="flex items-center gap-1 text-xs text-slate-400">
+          <span className="flex items-center gap-1 text-xs text-[#7d8b82]">
             <input type="range" min={0} max={100} value={item.progress_pct} className="w-20 accent-sky-400"
               onChange={e => upd.mutate({ id: item.id, patch: { progress_pct: Number(e.target.value) } })} />
             {item.progress_pct}%
@@ -76,29 +76,29 @@ function ItemRow({ item, tracks, byId, blockers, onChanged }: {
         {blockers.length > 0 && (
           <span className="text-xs">
             {blockers.map(b => (
-              <span key={b.id} title={b.title} className={`chip mr-1 ${b.status === 'done' ? '!border-emerald-400/30 text-emerald-300' : '!border-red-400/30 text-red-300'}`}>
+              <span key={b.id} title={b.title} className={`chip mr-1 ${b.status === 'done' ? '!border-emerald-400/30 text-[#2f7a4e]' : '!border-red-400/30 text-[#ad5347]'}`}>
                 {b.status === 'done' ? '✓' : '⊘'} {byId.get(b.id)?.title.slice(0, 28) ?? 'dep'}
               </span>
             ))}
           </span>
         )}
-        {item.goal_id && <span className="chip !border-violet-400/30 text-violet-300">→ goal</span>}
+        {item.goal_id && <span className="chip !border-violet-400/30 text-[#6d5fd0]">→ goal</span>}
       </div>
       {(item.detail || item.acceptance_criteria) && (
-        <button onClick={() => setShowAccept(v => !v)} className="ml-8 mt-1.5 text-xs text-slate-500 hover:text-slate-300">
+        <button onClick={() => setShowAccept(v => !v)} className="ml-8 mt-1.5 text-xs text-[#7d8b82] hover:text-[#354a40]">
           {showAccept ? '▾ hide brief' : '▸ brief + done-criteria'}
         </button>
       )}
       {showAccept && (
-        <div className="ml-8 mt-1 text-xs text-slate-300 space-y-1">
+        <div className="ml-8 mt-1 text-xs text-[#43564a] space-y-1">
           {item.detail && <p>{item.detail}</p>}
-          {item.acceptance_criteria && <p><span className="text-emerald-300 font-medium">Done when: </span>{item.acceptance_criteria}</p>}
+          {item.acceptance_criteria && <p><span className="text-[#2f7a4e] font-medium">Done when: </span>{item.acceptance_criteria}</p>}
         </div>
       )}
       <div className="ml-8 mt-2 flex flex-wrap gap-2 text-xs">
-        <button className="text-slate-500 hover:text-slate-200" onClick={() => { setF({ title: item.title, detail: item.detail ?? '', accept: item.acceptance_criteria ?? '', priority: item.priority, effort: item.effort ?? '', target: item.target_date ?? '', progress: item.progress_pct }); setEditing(v => !v) }}>edit</button>
-        {!item.goal_id && <button className="text-slate-500 hover:text-violet-300" onClick={toGoal}>→ goal</button>}
-        <button className="text-slate-500 hover:text-slate-200" onClick={() => upd.mutate({ id: item.id, patch: { status: item.status === 'skipped' ? 'todo' : 'skipped' } })}>{item.status === 'skipped' ? 'unskip' : 'skip'}</button>
+        <button className="text-[#7d8b82] hover:text-[#293b35]" onClick={() => { setF({ title: item.title, detail: item.detail ?? '', accept: item.acceptance_criteria ?? '', priority: item.priority, effort: item.effort ?? '', target: item.target_date ?? '', progress: item.progress_pct }); setEditing(v => !v) }}>edit</button>
+        {!item.goal_id && <button className="text-[#7d8b82] hover:text-[#6d5fd0]" onClick={toGoal}>→ goal</button>}
+        <button className="text-[#7d8b82] hover:text-[#293b35]" onClick={() => upd.mutate({ id: item.id, patch: { status: item.status === 'skipped' ? 'todo' : 'skipped' } })}>{item.status === 'skipped' ? 'unskip' : 'skip'}</button>
         <ConfirmButton onConfirm={() => undoDelete(item, 'Roadmap item')} />
       </div>
       {editing && (
@@ -159,17 +159,17 @@ function StageSection({ s, si, isOpen, isCurrent, onToggle, tracks, byId, blocke
   const pct = si.length ? Math.round((sd / si.length) * 100) : 0
   return (
     <div data-anim="card" className="relative pl-8 pb-4">
-      <span className={`absolute left-[9px] top-6 bottom-0 w-[3px] rounded-full origin-top ${isCurrent ? 'bg-gradient-to-b from-sky-400 via-violet-400 to-emerald-400 plan-rail-live' : 'bg-white/10'}`} />
-      <span className={`absolute left-[3px] top-[18px] w-4 h-4 rounded-full border-2 ${pct === 100 ? 'bg-emerald-400 border-emerald-400' : isCurrent ? 'bg-sky-400 border-sky-400' : 'bg-[#131822] border-white/30'}`} />
+      <span className={`absolute left-[9px] top-6 bottom-0 w-[3px] rounded-full origin-top ${isCurrent ? 'bg-gradient-to-b from-sky-400 via-violet-400 to-emerald-400 plan-rail-live' : 'bg-[#eef1eb]'}`} />
+      <span className={`absolute left-[3px] top-[18px] w-4 h-4 rounded-full border-2 ${pct === 100 ? 'bg-emerald-400 border-emerald-400' : isCurrent ? 'bg-sky-400 border-sky-400' : 'bg-white border-[#c2cdbd]'}`} />
       <button onClick={onToggle} aria-expanded={isOpen} className="card card-hover w-full text-left !p-4">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="font-semibold truncate">{s.title}</div>
-            <div className="text-xs text-slate-400 truncate">{s.timing_text}{s.objective ? ` · ${s.objective}` : ''}</div>
+            <div className="text-xs text-[#7d8b82] truncate">{s.timing_text}{s.objective ? ` · ${s.objective}` : ''}</div>
           </div>
-          <span className="text-xs tabular-nums text-slate-300 whitespace-nowrap">{sd}/{si.length}</span>
+          <span className="text-xs tabular-nums text-[#43564a] whitespace-nowrap">{sd}/{si.length}</span>
           <span className="w-20 hidden sm:block"><ProgressBar pct={pct} label={`${s.title} progress`} /></span>
-          <span className="text-slate-500">{isOpen ? '▾' : '▸'}</span>
+          <span className="text-[#7d8b82]">{isOpen ? '▾' : '▸'}</span>
         </div>
       </button>
       <div className={`acc mt-0 ${isOpen ? 'open mt-2' : ''}`}>
@@ -261,27 +261,27 @@ export default function Plan() {
   return (
     <div ref={rootRef}>
       <PageHeader title="Roadmap" sub="Your 5-year plan as a living checklist — mark done, extend, link to goals" />
-      <Card className="mb-4 sticky top-[118px] z-[5] !bg-[#131822]/95 backdrop-blur">
+      <Card className="mb-4 sticky top-[118px] z-[5] !bg-white/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px]">
             <div className="flex justify-between text-sm mb-1">
-              <span className="text-slate-300">Overall progress</span>
-              <span className="tabular-nums text-slate-300">{doneCt}/{active.length} · {overall}%</span>
+              <span className="text-[#43564a]">Overall progress</span>
+              <span className="tabular-nums text-[#43564a]">{doneCt}/{active.length} · {overall}%</span>
             </div>
             <ProgressBar pct={overall} color="bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-400" label="Overall roadmap progress" />
           </div>
-          {currentStage && <span className="chip !border-sky-400/40 text-sky-300">▶ {currentStage.title}</span>}
+          {currentStage && <span className="chip !border-sky-400/40 text-[#2b7a9e]">▶ {currentStage.title}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          <button onClick={() => setTrackF('')} className={`chip transition-colors ${!trackF ? '!bg-white !text-black !border-white font-medium' : 'hover:bg-white/10'}`}>All</button>
+          <button onClick={() => setTrackF('')} className={`chip transition-colors ${!trackF ? '!bg-[#37664d] !text-white !border-[#37664d] font-medium' : 'hover:bg-[#eef2ec]'}`}>All</button>
           {tracks.map(t => (
             <button
               key={t.id}
               onClick={() => setTrackF(trackF === t.id ? '' : t.id)}
               aria-pressed={trackF === t.id}
-              className={`chip transition-colors ${trackF === t.id ? '!bg-white !text-black !border-white font-medium' : 'hover:bg-white/10'}`}
+              className={`chip transition-colors ${trackF === t.id ? '!bg-[#37664d] !text-white !border-[#37664d] font-medium' : 'hover:bg-[#eef2ec]'}`}
             >
-              <span className="dot" style={{ background: trackF === t.id ? '#000' : t.color ?? '#64748b' }} />
+              <span className="dot" style={{ background: trackF === t.id ? '#fff' : t.color ?? '#64748b' }} />
               {t.name}
             </button>
           ))}
@@ -315,7 +315,7 @@ export default function Plan() {
         <Card><EmptyState>{items.length === 0 ? 'Roadmap seeds appear on first login — sign out and back in if empty.' : 'No items match these filters.'}</EmptyState></Card>
       )}
       <Card className="mt-2">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-[#7d8b82]">
           <StatusDot status="todo" /><StatusDot status="doing" /><StatusDot status="blocked" /><StatusDot status="done" /><StatusDot status="skipped" />
           <span className="ml-auto">Research tools only — never investment advice. CSE work stays private.</span>
         </div>

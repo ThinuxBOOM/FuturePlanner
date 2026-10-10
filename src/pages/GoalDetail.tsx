@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useTable, useInsert, useUpdate } from '../hooks/useData'
 import type { Goal, Milestone, Transaction } from '../lib/types'
 import { lkr } from '../lib/format'
+import { fmtMinor, tm } from '../lib/money'
 import { popNode } from '../lib/motion'
 import { useToast, ConfirmButton, useUndoDelete } from '../components/feedback'
 import { Card, EmptyState, PageHeader, ProgressBar, useReadyEnter } from '../components/ui'
@@ -26,10 +27,10 @@ export default function GoalDetail() {
   if (!id || !g) return <div className="card">Goal not found.</div>
   const ms = miles.filter(m => m.goal_id === id)
   const linked = txs.filter(t => t.goal_id === id)
-  const linkedIn = linked.filter(t => t.kind === 'income').reduce((s, t) => s + Number(t.amount), 0)
+  const linkedIn = linked.filter(t => t.kind === 'income').reduce((s, t) => s + tm(t), 0)
   const doneMs = ms.filter(m => m.is_done).length
   const pct = g.target_amount
-    ? Math.min(100, (linkedIn / Number(g.target_amount)) * 100)
+    ? Math.min(100, (linkedIn / (Number(g.target_amount) * 100)) * 100)
     : ms.length ? Math.round((doneMs / ms.length) * 100) : 0
 
   return (
@@ -37,9 +38,9 @@ export default function GoalDetail() {
       <PageHeader title={g.title} sub={`${g.status} · ${g.type}${g.target_date ? ` · due ${g.target_date}` : ''}`} />
       <Card className="mb-3">
         <div className="flex justify-between text-sm mb-1">
-          <span className="text-slate-300">Progress</span>
-          <span className="tabular-nums text-slate-300">
-            {g.target_amount ? `${lkr(linkedIn)} / ${lkr(g.target_amount)}` : `${doneMs}/${ms.length} milestones`}
+          <span className="text-[#43564a]">Progress</span>
+          <span className="tabular-nums text-[#43564a]">
+            {g.target_amount ? `${fmtMinor(linkedIn)} / ${lkr(g.target_amount)}` : `${doneMs}/${ms.length} milestones`}
           </span>
         </div>
         <div className="relative">
@@ -50,7 +51,7 @@ export default function GoalDetail() {
                 <span
                   key={m.id}
                   title={m.title}
-                  className={`absolute w-[3px] h-[12px] -top-[9px] rounded ${m.is_done ? 'bg-emerald-300' : 'bg-white/40'}`}
+                  className={`absolute w-[3px] h-[12px] -top-[9px] rounded ${m.is_done ? 'bg-emerald-300' : 'bg-[#b9c4b4]'}`}
                   style={{ left: `${((i + 1) / (ms.length + 1)) * 100}%` }}
                 />
               ))}
@@ -77,7 +78,7 @@ export default function GoalDetail() {
           <button className="btn" type="submit">Add</button>
         </form>
         {ms.map(m => (
-          <div key={m.id} data-anim="item" className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0 text-sm">
+          <div key={m.id} data-anim="item" className="flex items-center gap-2 py-1.5 border-b border-[#edf0e7] last:border-0 text-sm">
             <input
               type="checkbox" aria-label={`Mark ${m.title} ${m.is_done ? 'not done' : 'done'}`} checked={m.is_done} className="w-4 h-4 accent-emerald-400"
               onChange={e => {
@@ -85,7 +86,7 @@ export default function GoalDetail() {
                 popNode(e.currentTarget.closest('[data-anim="item"]') as HTMLElement | null)
               }}
             />
-            <span className={m.is_done ? 'line-through text-slate-400' : ''}>{m.title}</span>
+            <span className={m.is_done ? 'line-through text-[#7d8b82]' : ''}>{m.title}</span>
             <span className="ml-auto"><ConfirmButton onConfirm={() => undoDelete(m, 'Milestone')} /></span>
           </div>
         ))}
@@ -95,9 +96,9 @@ export default function GoalDetail() {
         <div className="font-semibold mb-2">Linked transactions ({linked.length})</div>
         <input aria-label="Filter linked transactions" className="input mb-2" placeholder="Filter notes…" value={filter} onChange={e => setFilter(e.target.value)} />
         {linked.filter(t => !filter || (t.notes ?? '').toLowerCase().includes(filter.toLowerCase())).slice(0, 50).map(t => (
-          <div key={t.id} className="text-sm flex justify-between gap-2 py-1 border-b border-white/5 last:border-0">
-            <span className="text-slate-300 truncate">{t.date} · {t.kind} · {t.notes ?? ''}</span>
-            <span className="tabular-nums whitespace-nowrap">{lkr(t.amount)}</span>
+          <div key={t.id} className="text-sm flex justify-between gap-2 py-1 border-b border-[#edf0e7] last:border-0">
+            <span className="text-[#43564a] truncate">{t.date} · {t.kind} · {t.notes ?? ''}</span>
+            <span className="tabular-nums whitespace-nowrap">{fmtMinor(tm(t))}</span>
           </div>
         ))}
         {linked.length === 0 && <EmptyState>Link transactions from the Transactions page via the goal dropdown.</EmptyState>}

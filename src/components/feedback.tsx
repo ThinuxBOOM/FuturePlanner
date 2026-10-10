@@ -50,8 +50,8 @@ function ToastRow({ toast, onDone }: { toast: Toast; onDone: () => void }) {
     <div
       ref={ref}
       role="status"
-      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm shadow-xl backdrop-blur ${
-        toast.kind === 'err' ? 'border-red-400/40 bg-red-950/90 text-red-100' : toast.kind === 'ok' ? 'border-emerald-400/30 bg-[#101a16]/95 text-emerald-100' : 'border-white/15 bg-[#141a26]/95 text-slate-100'
+      className={`flex items-center gap-2 rounded-[10px] px-4 py-3 text-[12px] leading-relaxed shadow-xl backdrop-blur ${
+        toast.kind === 'err' ? 'bg-[#7a2f28]/95 text-white' : 'bg-[#314f3c]/95 text-white'
       }`}
     >
       <span className="flex-1">{toast.text}</span>
@@ -60,7 +60,7 @@ function ToastRow({ toast, onDone }: { toast: Toast; onDone: () => void }) {
           {toast.action.label}
         </button>
       )}
-      <button aria-label="Dismiss notification" className="text-slate-400 hover:text-white" onClick={onDone}>✕</button>
+      <button aria-label="Dismiss notification" className="opacity-70 hover:opacity-100" onClick={onDone}>✕</button>
     </div>
   )
 }
@@ -88,7 +88,7 @@ export function ConfirmButton({ onConfirm, label = 'Delete', className = '' }: {
     <button
       aria-label={armed ? `Confirm ${label.toLowerCase()}` : label}
       onClick={click}
-      className={`${armed ? '!border-red-400/60 !text-red-300' : 'text-slate-600 hover:text-red-300'} btn-ghost !py-1 text-xs transition-colors ${className}`}
+      className={`${armed ? '!border-red-400/60 !text-[#ad5347]' : 'text-[#5f6f62] hover:text-[#ad5347]'} btn-ghost !py-1 text-xs transition-colors ${className}`}
     >
       {armed ? 'Sure?' : label}
     </button>

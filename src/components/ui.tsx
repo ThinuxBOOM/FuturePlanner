@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { Leaf } from 'lucide-react'
 import { countUp, fillBar, pageEnter, clearMotion } from '../lib/motion'
 
 /** Wrap a page root to run the entrance timeline once on mount. */
@@ -29,10 +30,10 @@ export function useReadyEnter<T extends HTMLElement>(ready: boolean) {
 
 export function PageHeader({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) {
   return (
-    <div data-anim="header" className="flex flex-wrap items-end gap-3 mb-4">
+    <div data-anim="header" className="flex flex-wrap items-end gap-3 mb-[22px]">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{title}</h1>
-        {sub && <p className="text-sm text-slate-400 mt-0.5">{sub}</p>}
+        <h1 className="font-display text-[26px] leading-tight tracking-tight text-[#293b35]">{title}</h1>
+        {sub && <p className="text-[12px] mt-1" style={{ color: '#7a877f' }}>{sub}</p>}
       </div>
       {action && <div className="ml-auto">{action}</div>}
     </div>
@@ -74,7 +75,7 @@ export function StatusDot({ status, color }: { status: string; color?: string })
     saving: 'bg-sky-400', ready: 'bg-violet-400', planned: 'bg-slate-500', deferred: 'bg-slate-600',
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-slate-300">
+    <span className="inline-flex items-center gap-1.5 text-xs text-[#43564a]">
       <span className={`dot ${color ?? map[status] ?? 'bg-slate-500'}`} />
       {status}
     </span>
@@ -91,18 +92,24 @@ export function TrackChip({ name, color }: { name: string; color?: string | null
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-slate-400">{children}</p>
+  return (
+    <div className="text-center py-6">
+      <Leaf size={26} className="mx-auto mb-2 text-[#9da99b]" />
+      <p className="text-sm" style={{ color: '#7a877f' }}>{children}</p>
+    </div>
+  )
 }
 
 export function SegmentedControl<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-lg border border-white/15 p-0.5 bg-black/30">
+    <div className="inline-flex rounded-lg border border-[#dfe5db] p-0.5 bg-[#f5f7f2]">
       {options.map(o => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`px-3 py-1.5 rounded-md text-sm transition-colors ${value === o.value ? 'bg-white text-black font-medium' : 'text-slate-300 hover:bg-white/10'}`}
+          aria-pressed={value === o.value}
+          className={`px-3 py-1.5 rounded-md text-sm transition-colors ${value === o.value ? 'bg-[#37664d] text-white font-medium' : 'text-[#7e8b82] hover:bg-white'}`}
         >
           {o.label}
         </button>

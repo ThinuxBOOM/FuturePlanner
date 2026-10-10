@@ -1,82 +1,56 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useLayoutEffect, useRef } from 'react'
-import { animate } from 'animejs'
-import { useAuth } from '../hooks/useAuth'
+import {
+  LayoutDashboard, ArrowLeftRight, Wallet, Target, Server, Map,
+  ClipboardList, Settings as SettingsIcon, LogOut, Sprout,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { motionOK } from '../lib/motion'
+import { useAuth } from '../hooks/useAuth'
 import { QuickAddFab } from './QuickAdd'
 
 const links = [
-  ['/', 'Dashboard'],
-  ['/transactions', 'Transactions'],
-  ['/budgets', 'Budgets'],
-  ['/goals', 'Goals'],
-  ['/infrastructure', 'Infra'],
-  ['/plan', 'Plan'],
-  ['/review', 'Review'],
-  ['/settings', 'Settings'],
-]
+  ['/', 'Dashboard', LayoutDashboard],
+  ['/transactions', 'Transactions', ArrowLeftRight],
+  ['/budgets', 'Budgets', Wallet],
+  ['/goals', 'Goals', Target],
+  ['/infrastructure', 'Infra', Server],
+  ['/plan', 'Plan', Map],
+  ['/review', 'Review', ClipboardList],
+  ['/settings', 'Settings', SettingsIcon],
+] as const
 
-const MOBILE_TABS = ['/', '/transactions', '/goals', '/plan']
+const MOBILE_TABS = ['/', '/transactions', '/goals', '/plan'] as const
 
-function ActivePill({ pathname }: { pathname: string }) {
-  const wrapRef = useRef<HTMLElement | null>(null)
-  const barRef = useRef<HTMLSpanElement | null>(null)
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current
-    const bar = barRef.current
-    if (!wrap || !bar) return
-    const place = () => {
-      const active = wrap.querySelector('[data-active="true"]') as HTMLElement | null
-      if (!active) {
-        bar.style.opacity = '0'
-        return
-      }
-      bar.style.opacity = '1'
-      const left = active.offsetLeft
-      const width = active.offsetWidth
-      if (motionOK()) {
-        animate(bar, { left, width, duration: 380, ease: 'outExpo' })
-      } else {
-        bar.style.left = `${left}px`
-        bar.style.width = `${width}px`
-      }
-    }
-    place()
-    window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [pathname])
-  return (
-    <nav ref={wrapRef} aria-label="Primary" className="max-w-6xl mx-auto px-4 pb-3 hidden md:flex gap-1 flex-wrap relative">
-      <span
-        ref={barRef}
-        aria-hidden="true"
-        className="absolute top-0 h-[34px] rounded-lg bg-white transition-none"
-        style={{ left: 0, width: 0, opacity: 0 }}
-      />
-      {links.map(([to, label]) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === '/'}
-          data-active={pathname === to || (to !== '/' && pathname.startsWith(to)) ? 'true' : 'false'}
-          className={({ isActive }) =>
-            `relative z-10 px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'text-black font-medium' : 'text-slate-300 hover:text-white'}`
-          }
-        >
-          {label}
-        </NavLink>
-      ))}
-    </nav>
-  )
+const TITLES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/transactions': 'Transactions',
+  '/budgets': 'Budgets',
+  '/goals': 'Goals',
+  '/infrastructure': 'Infrastructure',
+  '/plan': 'Roadmap',
+  '/review': 'Monthly review',
+  '/settings': 'Settings',
 }
 
-function MobileTabs({ pathname }: { pathname: string }) {
-  const tabs = links.filter(([to]) => MOBILE_TABS.includes(to))
+function titleFor(pathname: string): string {
+  if (pathname.startsWith('/goals/')) return 'Goal detail'
+  return TITLES[pathname] ?? 'FuturePlanner'
+}
+
+function Sidebar({ pathname, email, onSignOut }: { pathname: string; email?: string; onSignOut: () => void }) {
   return (
-    <nav aria-label="Primary" className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-[#0b0e13]/95 backdrop-blur">
-      <div className="grid grid-cols-4">
-        {tabs.map(([to, label]) => {
+    <aside className="hidden md:flex fixed top-0 bottom-0 left-0 w-[230px] flex-col bg-white border-r border-[#e3e7df] px-[18px] pt-[33px] pb-5 z-10">
+      <div className="flex items-center gap-[10px] px-2 pb-[28px]">
+        <span className="w-[39px] h-[43px] rounded-xl bg-[#37664d] text-white grid place-items-center -rotate-[5deg]">
+          <Sprout size={22} />
+        </span>
+        <span>
+          <span className="block text-[17px] font-semibold tracking-tight text-[#293b35]">FuturePlanner</span>
+          <span className="block text-[8px] tracking-[0.18em] font-semibold text-[#a0aaa1] mt-[3px]">5-YEAR TRACKER · LKR</span>
+        </span>
+      </div>
+      <div className="text-[9px] font-semibold tracking-[0.14em] text-[#a0aaa1] pl-[13px] mb-[14px]">MENU</div>
+      <nav aria-label="Primary" className="grid gap-[7px]">
+        {links.map(([to, label, Icon]) => {
           const active = pathname === to || (to !== '/' && pathname.startsWith(to))
           return (
             <NavLink
@@ -84,9 +58,62 @@ function MobileTabs({ pathname }: { pathname: string }) {
               to={to}
               end={to === '/'}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] ${active ? 'text-white font-semibold' : 'text-slate-500'}`}
+              className={`side-link flex items-center gap-[13px] rounded-lg text-[13px] px-[15px] py-[12px] relative ${
+                active ? 'bg-[#eaf1e8] text-[#356549] font-semibold' : 'text-[#7e8b82] hover:bg-[#f5f7f2]'
+              }`}
             >
-              <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-white' : 'bg-white/20'}`} />
+              {active && <span aria-hidden="true" className="absolute left-[-18px] top-[9px] bottom-[9px] w-[3px] rounded bg-[#528368]" />}
+              <Icon size={17} />
+              {label}
+            </NavLink>
+          )
+        })}
+      </nav>
+      <div className="mt-auto pt-6">
+        <div className="flex items-center gap-[10px] rounded-lg bg-[#f7f8f4] p-3 text-[12px] text-[#354a40]">
+          <ShieldDot />
+          <span>Private · single user<small className="block text-[9px] text-[#7d8b82] mt-[2px]">Supabase-backed</small></span>
+        </div>
+        <div className="flex items-center gap-[10px] mt-[16px] px-[5px] text-[11px] text-[#354a40]">
+          <span aria-hidden="true" className="grid place-items-center w-[33px] h-[33px] rounded-full bg-[#e8dfcd] text-[#7e735d] font-display text-[17px]">
+            {(email ?? 'F').charAt(0).toUpperCase()}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block truncate">{email}</span>
+          </span>
+          <button aria-label="Sign out" title="Sign out" className="text-[#7e8b82] hover:text-[#293b35]" onClick={onSignOut}>
+            <LogOut size={16} />
+          </button>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function ShieldDot() {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#37664d" strokeWidth={2} aria-hidden="true">
+      <path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z" />
+    </svg>
+  )
+}
+
+function MobileTabs({ pathname }: { pathname: string }) {
+  const tabs = links.filter(([to]) => (MOBILE_TABS as readonly string[]).includes(to))
+  return (
+    <nav aria-label="Primary" className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#e3e7df] bg-white/95 backdrop-blur">
+      <div className="grid grid-cols-4">
+        {tabs.map(([to, label, Icon]) => {
+          const active = pathname === to || (to !== '/' && pathname.startsWith(to))
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              aria-current={active ? 'page' : undefined}
+              className={`flex flex-col items-center gap-1 py-2.5 text-[11px] ${active ? 'text-[#356549] font-semibold' : 'text-[#7e8b82]'}`}
+            >
+              <Icon size={19} />
               {label}
             </NavLink>
           )
@@ -100,25 +127,33 @@ export default function Layout() {
   const { user } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
+  const signOut = async () => { await supabase.auth.signOut(); nav('/login') }
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <header className="border-b border-white/10 sticky top-0 bg-[#0b0e13]/85 backdrop-blur z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <span className="font-display font-bold tracking-tight text-[15px]">
-            <span className="bg-gradient-to-r from-sky-300 via-violet-300 to-emerald-300 bg-clip-text text-transparent">FuturePlanner</span>
-          </span>
-          <span className="text-xs text-slate-500 hidden sm:inline">5-year goal + budget · LKR · private</span>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            <span className="text-slate-400 truncate max-w-[180px] hidden sm:inline">{user?.email}</span>
-            <button className="btn-ghost !py-1.5 text-sm" onClick={async () => { await supabase.auth.signOut(); nav('/login') }}>Sign out</button>
+      <Sidebar pathname={loc.pathname} email={user?.email} onSignOut={signOut} />
+      <div className="md:ml-[230px]">
+        <header className="h-[64px] md:h-[75px] bg-[#fcfdf9] border-b border-[#e6eae2] flex items-center justify-between px-4 md:px-9 sticky top-0 z-10">
+          <div className="flex items-center gap-2 md:hidden">
+            <span className="w-7 h-8 rounded-lg bg-[#37664d] text-white grid place-items-center -rotate-[5deg]">
+              <Sprout size={16} />
+            </span>
+            <span className="font-semibold text-[#293b35]">FuturePlanner</span>
           </div>
-        </div>
-        <ActivePill pathname={loc.pathname} />
-      </header>
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        <Outlet />
-      </main>
+          <div className="hidden md:block text-[11px] text-[#7d8b82]">
+            FuturePlanner <span className="mx-2 text-[#bcc4ba]">/</span> {titleFor(loc.pathname)}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:flex items-center gap-[6px] text-[10px] text-[#7c8b80]">
+              <i className="w-[5px] h-[5px] rounded-full bg-[#6d9b77]" /> LKR · Private
+            </span>
+            <button className="btn-ghost !py-1.5 text-sm md:hidden" onClick={signOut}>Sign out</button>
+          </div>
+        </header>
+        <main className="px-4 md:px-9 py-6 md:py-8 max-w-[1200px]">
+          <Outlet />
+        </main>
+      </div>
       <MobileTabs pathname={loc.pathname} />
       <QuickAddFab />
     </div>

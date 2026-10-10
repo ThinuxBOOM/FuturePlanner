@@ -107,7 +107,7 @@ export default function Review() {
           <input aria-label="Metric value" className="input !w-auto" placeholder="value" value={val} onChange={e => setVal(e.target.value)} />
           <button className="btn" type="submit">Add</button>
         </form>
-        <p className="text-xs text-slate-500 mt-2">{CAT_HINTS[cat]}</p>
+        <p className="text-xs text-[#7d8b82] mt-2">{CAT_HINTS[cat]}</p>
       </Card>
       {isLoading ? <Card><div className="skeleton h-24" /></Card> : byCat.map(g => (
         <Card key={g.cat} className="mb-3 !border-t-2" >
@@ -118,15 +118,15 @@ export default function Review() {
           {g.rows.map(r => {
             const s = sparkByKey.get(`${r.category}||${r.key}`)
             return (
-              <div key={r.id} className="flex items-center gap-3 py-1.5 border-b border-white/5 last:border-0">
+              <div key={r.id} className="flex items-center gap-3 py-1.5 border-b border-[#edf0e7] last:border-0">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm">{r.key}{r.notes ? <span className="text-slate-500"> · {r.notes}</span> : ''}</div>
+                  <div className="text-sm">{r.key}{r.notes ? <span className="text-[#7d8b82]"> · {r.notes}</span> : ''}</div>
                 </div>
                 {s && s.vals.length >= 2 && <Spark vals={s.vals} color={CAT_COLORS[g.cat] ?? '#94a3b8'} />}
                 <div className="text-right">
                   <div className="text-sm tabular-nums">{r.value_text ?? r.value_num ?? '—'}</div>
                   {s?.delta !== null && s?.delta !== undefined && (
-                    <div className={`text-[11px] tabular-nums ${s.delta > 0 ? 'text-pos' : s.delta < 0 ? 'text-neg' : 'text-slate-500'}`}>
+                    <div className={`text-[11px] tabular-nums ${s.delta > 0 ? 'text-pos' : s.delta < 0 ? 'text-neg' : 'text-[#7d8b82]'}`}>
                       {s.delta > 0 ? '▲' : s.delta < 0 ? '▼' : '●'} {Math.abs(s.delta)}
                     </div>
                   )}

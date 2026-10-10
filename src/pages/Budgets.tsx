@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useTable, useInsert } from '../hooks/useData'
 import type { Budget, Category, Transaction } from '../lib/types'
-import { lkr, lkrShort, monthKey } from '../lib/format'
+import { lkr, monthKey } from '../lib/format'
+import { fmtMinor, fmtMinorShort, spendingMinor } from '../lib/money'
 import { useToast, ConfirmButton, useUndoDelete } from '../components/feedback'
 import { Card, EmptyState, PageHeader, ProgressBar, useReadyEnter } from '../components/ui'
 
@@ -31,12 +32,12 @@ export default function Budgets() {
     const b = budgets.filter(x => x.month.slice(0, 7) === mk)
     const actual = new Map<string, number>()
     txs.filter(t => t.date.slice(0, 7) === mk && t.kind === 'expense' && t.category_id).forEach(t => {
-      actual.set(t.category_id!, (actual.get(t.category_id!) ?? 0) + Number(t.amount))
+      actual.set(t.category_id!, (actual.get(t.category_id!) ?? 0) + spendingMinor(t))
     })
     return b.map(x => ({ ...x, actual: actual.get(x.category_id) ?? 0, cat: cats.find(c => c.id === x.category_id)?.name ?? '—' }))
   }, [budgets, txs, cats, mk])
 
-  const totalP = rows.reduce((s, r) => s + Number(r.planned_amount), 0)
+  const totalP = rows.reduce((s, r) => s + Math.round(Number(r.planned_amount) * 100), 0)
   const totalA = rows.reduce((s, r) => s + r.actual, 0)
 
   return (
@@ -46,16 +47,16 @@ export default function Budgets() {
         <div className="flex flex-wrap items-end gap-4">
           <div><div className="label">Month</div><input aria-label="Month" className="input !w-auto" type="month" value={month.slice(0, 7)} onChange={e => setMonth(e.target.value + '-01')} /></div>
           <div className="text-sm flex gap-4">
-            <span className="text-slate-400">Planned <b className="text-slate-100 tabular-nums">{lkr(totalP)}</b></span>
-            <span className="text-slate-400">Actual <b className="text-slate-100 tabular-nums">{lkr(totalA)}</b></span>
-            <span className={totalP - totalA < 0 ? 'text-neg' : 'text-pos'}>Left <b className="tabular-nums">{lkr(totalP - totalA)}</b></span>
+            <span className="text-[#7d8b82]">Planned <b className="text-[#293b35] tabular-nums">{fmtMinor(totalP)}</b></span>
+            <span className="text-[#7d8b82]">Actual <b className="text-[#293b35] tabular-nums">{fmtMinor(totalA)}</b></span>
+            <span className={totalP - totalA < 0 ? 'text-neg' : 'text-pos'}>Left <b className="tabular-nums">{fmtMinor(totalP - totalA)}</b></span>
           </div>
         </div>
         <div className="relative mt-2">
           <ProgressBar pct={totalP > 0 ? Math.min(100, (totalA / totalP) * 100) : 0} color={totalA > totalP ? 'bg-neg' : 'bg-sky-400'} label="Total budget used" />
-          <span title={`${Math.round(elapsed * 100)}% of month elapsed`} className="absolute top-[-3px] h-[14px] w-[2px] bg-white/70 rounded" style={{ left: `${elapsed * 100}%` }} />
+          <span title={`${Math.round(elapsed * 100)}% of month elapsed`} className="absolute top-[-3px] h-[14px] w-[2px] bg-[#37664d] rounded" style={{ left: `${elapsed * 100}%` }} />
         </div>
-        <div className="text-xs text-slate-500 mt-1">pace marker = month elapsed ({Math.round(elapsed * 100)}% of {dim} days)</div>
+        <div className="text-xs text-[#7d8b82] mt-1">pace marker = month elapsed ({Math.round(elapsed * 100)}% of {dim} days)</div>
       </Card>
       <Card className="mb-4">
         <div className="eyebrow mb-2">Add budget line</div>
@@ -77,21 +78,22 @@ export default function Budgets() {
       </Card>
       <Card>
         {isLoading ? <div className="skeleton h-24" /> : rows.map(r => {
-          const pct = Number(r.planned_amount) > 0 ? Math.min(100, (r.actual / Number(r.planned_amount)) * 100) : 0
-          const over = r.actual > Number(r.planned_amount)
-          const left = Number(r.planned_amount) - r.actual
+          const planMinor = Math.round(Number(r.planned_amount) * 100)
+          const pct = planMinor > 0 ? Math.min(100, (r.actual / planMinor) * 100) : 0
+          const over = r.actual > planMinor
+          const left = planMinor - r.actual
           return (
-            <div key={r.id} className={`py-2.5 border-b border-white/5 last:border-0 rounded-lg ${over ? 'bg-red-400/5 px-2 -mx-2 shadow-[0_0_18px_rgba(248,113,113,0.15)]' : ''}`}>
+            <div key={r.id} className={`py-2.5 border-b border-[#edf0e7] last:border-0 rounded-lg ${over ? 'bg-red-400/5 px-2 -mx-2 shadow-[0_0_18px_rgba(248,113,113,0.15)]' : ''}`}>
               <div className="flex justify-between text-sm gap-2">
                 <span>{r.cat}</span>
-                <span className="tabular-nums text-slate-300">{lkr(r.actual)} <span className="text-slate-500">/ {lkr(r.planned_amount)}</span></span>
+                <span className="tabular-nums text-[#43564a]">{fmtMinor(r.actual)} <span className="text-[#7d8b82]">/ {fmtMinor(planMinor)}</span></span>
                 <ConfirmButton onConfirm={() => undoDelete(r, 'Budget line')} />
               </div>
               <ProgressBar pct={pct} color={over ? 'bg-neg' : 'bg-sky-400'} className="mt-1.5" label={`${r.cat} budget used`} />
-              <div className="text-xs text-slate-500 mt-1">
-                {over ? <span className="text-neg">over by {lkrShort(-left)}</span>
-                  : daysLeft > 0 ? <span>{lkrShort(left)} left · ~{lkrShort(left / Math.max(1, daysLeft))}/day for {daysLeft}d</span>
-                  : <span>{lkrShort(left)} left</span>}
+              <div className="text-xs text-[#7d8b82] mt-1">
+                {over ? <span className="text-neg">over by {fmtMinorShort(-left)}</span>
+                  : daysLeft > 0 ? <span>{fmtMinorShort(left)} left · ~{fmtMinorShort(Math.round(left / Math.max(1, daysLeft)))}/day for {daysLeft}d</span>
+                  : <span>{fmtMinorShort(left)} left</span>}
               </div>
             </div>
           )

@@ -2,9 +2,18 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useTable } from '../hooks/useData'
 import type { Account, Category, Goal, InfraItem, Transaction } from '../lib/types'
-import { lkr, lkrShort, monthKey } from '../lib/format'
+import { fmtMinor, fmtMinorShort, balancesMinor, sumMinor, sumSpending, tm } from '../lib/money'
+import { monthKey } from '../lib/format'
 import { drawLine } from '../lib/motion'
+import { Leaf } from 'lucide-react'
 import { Card, EmptyState, PageHeader, ProgressBar, Stat, TrackChip, useReadyEnter } from '../components/ui'
+import { fillBar } from '../lib/motion'
+
+function HeroPace({ pct, over }: { pct: number; over: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => fillBar(ref.current, pct), [pct])
+  return <div ref={ref} className={`h-full rounded-full origin-left ${over ? 'bg-[#f0a49a]' : 'bg-[#9fd0ab]'}`} style={{ transform: 'scaleX(0)' }} />
+}
 
 const TARGET_RUNWAY_MONTHS = 6
 
@@ -25,12 +34,12 @@ function FlowChart({ inc, exp, labels }: { inc: number[]; exp: number[]; labels:
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Income versus expenses, last 6 months">
       {[0.25, 0.5, 0.75].map(f => (
-        <line key={f} x1={PAD} x2={W - PAD} y1={H - PAD - f * (H - PAD * 2 - 14)} y2={H - PAD - f * (H - PAD * 2 - 14)} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+        <line key={f} x1={PAD} x2={W - PAD} y1={H - PAD - f * (H - PAD * 2 - 14)} y2={H - PAD - f * (H - PAD * 2 - 14)} stroke="rgba(41,59,53,0.10)" strokeWidth={1} />
       ))}
-      <polyline ref={expRef} points={pts(exp)} fill="none" stroke="#f87171" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      <polyline ref={incRef} points={pts(inc)} fill="none" stroke="#34d399" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline ref={expRef} points={pts(exp)} fill="none" stroke="#c05a4b" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline ref={incRef} points={pts(inc)} fill="none" stroke="#3f8a5c" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {labels.map((l, i) => (
-        <text key={l} x={PAD + (i * (W - PAD * 2)) / Math.max(1, labels.length - 1)} y={H - 1} textAnchor="middle" fontSize={8} fill="#64748b">{l}</text>
+        <text key={l} x={PAD + (i * (W - PAD * 2)) / Math.max(1, labels.length - 1)} y={H - 1} textAnchor="middle" fontSize={8} fill="#7d8b82">{l}</text>
       ))}
     </svg>
   )
@@ -49,32 +58,25 @@ export default function Dashboard() {
     const now = new Date()
     const mk = monthKey().slice(0, 7)
     const inMonth = txs.filter(t => t.date.slice(0, 7) === mk)
-    const inc = inMonth.filter(t => t.kind === 'income').reduce((s, t) => s + Number(t.amount), 0)
-    const exp = inMonth.filter(t => t.kind === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+    // all sums below are integer minor units — exact, no float drift
+    const inc = sumMinor(inMonth, t => t.kind === 'income')
+    const exp = sumSpending(inMonth, t => t.kind === 'expense' || t.kind === 'refund' || t.kind === 'payment')
     const save = inc - exp
     const rate = inc > 0 ? (save / inc) * 100 : 0
-    const byAcct = new Map<string, number>()
-    accounts.forEach(a => byAcct.set(a.id, Number(a.opening_balance)))
-    txs.forEach(t => {
-      if (t.kind === 'income') byAcct.set(t.account_id, (byAcct.get(t.account_id) ?? 0) + Number(t.amount))
-      if (t.kind === 'expense') byAcct.set(t.account_id, (byAcct.get(t.account_id) ?? 0) - Number(t.amount))
-      if (t.kind === 'transfer') {
-        byAcct.set(t.account_id, (byAcct.get(t.account_id) ?? 0) - Number(t.amount))
-        if (t.to_account_id) byAcct.set(t.to_account_id, (byAcct.get(t.to_account_id) ?? 0) + Number(t.amount))
-      }
-    })
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const byAcct = balancesMinor(accounts, txs, today)
     const liquid = accounts.filter(a => !['trading'].includes(a.type)).reduce((s, a) => s + (byAcct.get(a.id) ?? 0), 0)
     const last3 = [0, 1, 2].map(i => {
       const d = new Date(); d.setMonth(d.getMonth() - i)
       const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      return txs.filter(t => t.date.slice(0, 7) === k && t.kind === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+      return sumSpending(txs, t => t.date.slice(0, 7) === k && (t.kind === 'expense' || t.kind === 'refund' || t.kind === 'payment'))
     })
-    const avgBurn = last3.reduce((a, b) => a + b, 0) / 3 || 0
+    const avgBurn = Math.round(last3.reduce((a, b) => a + b, 0) / 3) || 0
     const runway = avgBurn > 0 ? liquid / avgBurn : 0
     // pace: how far through the month vs expected burn
     const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     const elapsed = Math.min(1, now.getDate() / dim)
-    const expected = avgBurn * elapsed
+    const expected = Math.round(avgBurn * elapsed)
     const pace = expected > 0 ? exp / expected : 0
     const verdict = expected <= 0 ? 'fresh' : pace <= 1 ? 'on-track' : pace <= 1.25 ? 'at-risk' : 'over'
 
@@ -85,8 +87,8 @@ export default function Dashboard() {
       months.push({
         key: k,
         label: d.toLocaleString('en', { month: 'short' }),
-        inc: txs.filter(t => t.date.slice(0, 7) === k && t.kind === 'income').reduce((s, t) => s + Number(t.amount), 0),
-        exp: txs.filter(t => t.date.slice(0, 7) === k && t.kind === 'expense').reduce((s, t) => s + Number(t.amount), 0),
+        inc: sumMinor(txs, t => t.date.slice(0, 7) === k && t.kind === 'income'),
+        exp: sumSpending(txs, t => t.date.slice(0, 7) === k && (t.kind === 'expense' || t.kind === 'refund' || t.kind === 'payment')),
       })
     }
     const infraFund = accounts.find(a => a.type === 'infra_fund')
@@ -106,15 +108,15 @@ export default function Dashboard() {
   const nextInfra = infra.filter(i => i.status !== 'purchased').slice(0, 4)
   const savedByGoal = useMemo(() => {
     const map = new Map<string, number>()
-    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + Number(t.amount)))
+    txs.filter(t => t.goal_id && t.kind === 'income').forEach(t => map.set(t.goal_id!, (map.get(t.goal_id!) ?? 0) + tm(t)))
     return map
   }, [txs])
 
   const verdictChip =
-    m.verdict === 'on-track' ? <span className="chip !border-emerald-400/40 text-emerald-300">● on track</span> :
-    m.verdict === 'at-risk' ? <span className="chip !border-amber-300/40 text-amber-300">● at risk</span> :
-    m.verdict === 'over' ? <span className="chip !border-red-400/40 text-red-300">● over pace</span> :
-    <span className="chip">● fresh month</span>
+    m.verdict === 'on-track' ? <span className="chip !border-white/30 !bg-white/10 !text-white">● on track</span> :
+    m.verdict === 'at-risk' ? <span className="chip !border-white/30 !bg-white/10 !text-white">● at risk</span> :
+    m.verdict === 'over' ? <span className="chip !border-white/30 !bg-white/10 !text-white">● over pace</span> :
+    <span className="chip !border-white/30 !bg-white/10 !text-white">● fresh month</span>
 
   return (
     <div ref={rootRef}>
@@ -123,31 +125,32 @@ export default function Dashboard() {
         <div className="grid sm:grid-cols-4 gap-3">{[0, 1, 2, 3].map(i => <Card key={i}><div className="skeleton h-16" /></Card>)}</div>
       ) : (
         <>
-          <Card className="mb-3 !border-white/15">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <div className="eyebrow">Am I on track this month?</div>
-                <div className="text-lg font-bold font-display mt-0.5">
-                  {m.expected > 0 ? <>{lkr(m.exp)} <span className="text-sm font-normal text-slate-400">of ~{lkr(m.expected)} expected pace</span></> : 'Log expenses to set your pace'}
-                </div>
-              </div>
-              <div className="ml-auto">{verdictChip}</div>
+          <div data-anim="card" className="mb-3 rounded-[13px] bg-[#365a46] text-white p-6 sm:p-7 relative overflow-hidden">
+            <div className="eyebrow !text-[#c3d2bd]">Am I on track this month?</div>
+            <div className="font-display text-[34px] leading-tight mt-3">
+              {m.expected > 0 ? <>{fmtMinor(m.exp)} <span className="text-sm font-sans font-normal text-[#b9cdbb]">of ~{fmtMinor(m.expected)} expected pace</span></> : 'Log expenses to set your pace'}
             </div>
-            <div className="mt-2"><ProgressBar pct={m.expected > 0 ? Math.min(100, m.pace * 100) : 0} color={m.verdict === 'over' ? 'bg-neg' : m.verdict === 'at-risk' ? 'bg-amber-300' : 'bg-pos'} label="Month spend pace" /></div>
-          </Card>
+            <div className="flex items-center gap-3 mt-4">
+              <div className="flex-1 h-[6px] rounded-full bg-white/20 overflow-hidden">
+                <HeroPace pct={m.expected > 0 ? Math.min(100, m.pace * 100) : 0} over={m.verdict === 'over'} />
+              </div>
+              {verdictChip}
+            </div>
+            <Leaf size={120} className="absolute -bottom-4 right-3 opacity-[0.12] rotate-[30deg] text-white" aria-hidden="true" />
+          </div>
 
           <div className="grid sm:grid-cols-4 gap-3">
-            <Card><Stat label="Month income" value={m.inc} format={lkr} tone="text-pos" /></Card>
-            <Card><Stat label="Month expenses" value={m.exp} format={lkr} tone="text-neg" /></Card>
+            <Card><Stat label="Month income" value={m.inc} format={fmtMinor} tone="text-pos" /></Card>
+            <Card><Stat label="Month expenses" value={m.exp} format={fmtMinor} tone="text-neg" /></Card>
             <Card>
               <div className="label">Saved</div>
-              <div className="stat-num" title={lkr(m.save)}>{lkrShort(m.save)}</div>
-              <div className="text-xs text-slate-400 mt-1">{m.rate.toFixed(1)}% rate</div>
+              <div className="stat-num" title={fmtMinor(m.save)}>{fmtMinorShort(m.save)}</div>
+              <div className="text-xs text-[#7d8b82] mt-1">{m.rate.toFixed(1)}% rate</div>
             </Card>
             <Card>
               <div className="label">Runway</div>
               <div className="stat-num">{m.avgBurn > 0 ? `${m.runway.toFixed(1)} mo` : '—'}</div>
-              <div className="text-xs text-slate-400 mt-1">burn {lkrShort(m.avgBurn)}<span title={lkr(m.avgBurn)}>/mo</span></div>
+              <div className="text-xs text-[#7d8b82] mt-1">burn {fmtMinorShort(m.avgBurn)}<span title={fmtMinor(m.avgBurn)}>/mo</span></div>
             </Card>
           </div>
 
@@ -160,18 +163,18 @@ export default function Dashboard() {
             <div className="space-y-3">
               <Card>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-slate-300">Emergency fund</span>
-                  <span className="tabular-nums" title={lkr(m.emergBal)}>{lkrShort(m.emergBal)} <span className="text-slate-500">/ {lkrShort(m.emergTarget)} ({TARGET_RUNWAY_MONTHS} mo)</span></span>
+                  <span className="text-[#43564a]">Emergency fund</span>
+                  <span className="tabular-nums" title={fmtMinor(m.emergBal)}>{fmtMinorShort(m.emergBal)} <span className="text-[#7d8b82]">/ {fmtMinorShort(m.emergTarget)} ({TARGET_RUNWAY_MONTHS} mo)</span></span>
                 </div>
                 <ProgressBar pct={m.emergTarget > 0 ? (m.emergBal / m.emergTarget) * 100 : 0} label="Emergency fund vs target" />
                 <div className="flex justify-between text-sm mb-1 mt-3">
-                  <span className="text-slate-300">Infrastructure fund</span>
-                  <span className="tabular-nums" title={lkr(m.infraBal)}>{lkrShort(m.infraBal)}</span>
+                  <span className="text-[#43564a]">Infrastructure fund</span>
+                  <span className="tabular-nums" title={fmtMinor(m.infraBal)}>{fmtMinorShort(m.infraBal)}</span>
                 </div>
                 {nextInfra.slice(0, 1).map(i => (
                   <div key={i.id}>
                     <ProgressBar pct={i.est_max ? (m.infraBal / Number(i.est_max)) * 100 : 0} color="bg-violet-400" label={`Funded vs ${i.name}`} />
-                    <div className="text-xs text-slate-500 mt-1">covers {i.est_max ? Math.min(100, Math.round((m.infraBal / Number(i.est_max)) * 100)) : 0}% of #{i.order_n} {i.name}</div>
+                    <div className="text-xs text-[#7d8b82] mt-1">covers {i.est_max ? Math.min(100, Math.round((m.infraBal / Number(i.est_max)) * 100)) : 0}% of #{i.order_n} {i.name}</div>
                   </div>
                 ))}
               </Card>
@@ -181,7 +184,7 @@ export default function Dashboard() {
                   const bal = m.byAcct.get(a.id) ?? 0
                   return (
                     <div key={a.id} className="py-1">
-                      <div className="text-sm flex justify-between"><span className="text-slate-300">{a.name}</span><span className="tabular-nums" title={lkr(bal)}>{lkrShort(bal)}</span></div>
+                      <div className="text-sm flex justify-between"><span className="text-[#43564a]">{a.name}</span><span className="tabular-nums" title={fmtMinor(bal)}>{fmtMinorShort(bal)}</span></div>
                     </div>
                   )
                 })}
@@ -196,13 +199,13 @@ export default function Dashboard() {
               {activeGoals.length === 0 && <EmptyState>No active goals. <Link className="underline" to="/goals">Create one</Link>.</EmptyState>}
               {activeGoals.map(g => {
                 const saved = savedByGoal.get(g.id) ?? 0
-                const pct = g.target_amount ? Math.min(100, (saved / Number(g.target_amount)) * 100) : 0
+                const pct = g.target_amount ? Math.min(100, (saved / (Number(g.target_amount) * 100)) * 100) : 0
                 const tr = g.track_id ? m.trackById.get(g.track_id) : undefined
                 return (
-                  <div key={g.id} className="py-1.5 border-b border-white/5 last:border-0">
+                  <div key={g.id} className="py-1.5 border-b border-[#edf0e7] last:border-0">
                     <div className="text-sm flex justify-between gap-2">
                       <Link to={`/goals/${g.id}`} className="hover:underline truncate">{g.title}</Link>
-                      <span className="text-slate-400 tabular-nums whitespace-nowrap" title={g.target_amount ? lkr(Number(g.target_amount)) : undefined}>{g.target_amount ? lkrShort(Number(g.target_amount)) : '—'}</span>
+                      <span className="text-[#7d8b82] tabular-nums whitespace-nowrap" title={g.target_amount ? fmtMinor(Number(g.target_amount) * 100) : undefined}>{g.target_amount ? fmtMinorShort(Number(g.target_amount) * 100) : '—'}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       {tr && <TrackChip name={tr.name} color={tr.color} />}
@@ -215,9 +218,9 @@ export default function Dashboard() {
             <Card>
               <div className="font-semibold mb-2">Next infrastructure</div>
               {nextInfra.map(i => (
-                <div key={i.id} className="text-sm flex justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
+                <div key={i.id} className="text-sm flex justify-between gap-2 py-1.5 border-b border-[#edf0e7] last:border-0">
                   <span className="truncate">#{i.order_n} {i.name}</span>
-                  <span className="text-slate-400 tabular-nums whitespace-nowrap" title={i.est_min ? `${lkr(Number(i.est_min))} – ${lkr(Number(i.est_max))}` : undefined}>{i.est_min ? `${lkrShort(Number(i.est_min))}–${lkrShort(Number(i.est_max))}` : 'TBD'}</span>
+                  <span className="text-[#7d8b82] tabular-nums whitespace-nowrap" title={i.est_min ? `${fmtMinor(Number(i.est_min) * 100)} – ${fmtMinor(Number(i.est_max) * 100)}` : undefined}>{i.est_min ? `${fmtMinorShort(Number(i.est_min) * 100)}–${fmtMinorShort(Number(i.est_max) * 100)}` : 'TBD'}</span>
                 </div>
               ))}
               {nextInfra.length === 0 && <EmptyState>Everything acquired. 🎉</EmptyState>}
@@ -226,9 +229,9 @@ export default function Dashboard() {
           <Card className="mt-3">
             <div className="font-semibold mb-2">Recent transactions</div>
             {txs.slice(0, 8).map(t => (
-              <div key={t.id} className="text-sm flex justify-between gap-2 py-1 border-b border-white/5 last:border-0">
-                <span className="text-slate-300 truncate">{t.date} · {t.kind} · {m.catById.get(t.category_id ?? '')?.name ?? (t.kind === 'transfer' ? 'Transfer' : '—')}</span>
-                <span className="tabular-nums whitespace-nowrap">{lkr(t.amount)}</span>
+              <div key={t.id} className="text-sm flex justify-between gap-2 py-1 border-b border-[#edf0e7] last:border-0">
+                <span className="text-[#43564a] truncate">{t.date} · {t.kind} · {m.catById.get(t.category_id ?? '')?.name ?? (t.kind === 'transfer' || t.kind === 'payment' ? (t.kind === 'payment' ? 'Repayment' : 'Transfer') : '—')}</span>
+                <span className="tabular-nums whitespace-nowrap">{fmtMinor(tm(t))}</span>
               </div>
             ))}
             {txs.length === 0 && <EmptyState>No transactions yet. Add your first daily entry in Transactions.</EmptyState>}
