@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ArrowLeftRight, Wallet, Target, Server, Map,
-  ClipboardList, Settings as SettingsIcon, LogOut, Sprout,
+  ClipboardList, Settings as SettingsIcon, LogOut, Sprout, CalendarClock, MoreHorizontal,
 } from 'lucide-react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { QuickAddFab } from './QuickAdd'
@@ -10,6 +11,7 @@ import { QuickAddFab } from './QuickAdd'
 const links = [
   ['/', 'Dashboard', LayoutDashboard],
   ['/transactions', 'Transactions', ArrowLeftRight],
+  ['/schedules', 'Schedules', CalendarClock],
   ['/budgets', 'Budgets', Wallet],
   ['/goals', 'Goals', Target],
   ['/infrastructure', 'Infra', Server],
@@ -99,27 +101,58 @@ function ShieldDot() {
 }
 
 function MobileTabs({ pathname }: { pathname: string }) {
+  const [more, setMore] = useState(false)
   const tabs = links.filter(([to]) => (MOBILE_TABS as readonly string[]).includes(to))
+  const rest = links.filter(([to]) => !(MOBILE_TABS as readonly string[]).includes(to))
   return (
-    <nav aria-label="Primary" className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#e3e7df] bg-white/95 backdrop-blur">
-      <div className="grid grid-cols-4">
-        {tabs.map(([to, label, Icon]) => {
-          const active = pathname === to || (to !== '/' && pathname.startsWith(to))
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center gap-1 py-2.5 text-[11px] ${active ? 'text-[#356549] font-semibold' : 'text-[#7e8b82]'}`}
-            >
-              <Icon size={19} />
-              {label}
-            </NavLink>
-          )
-        })}
-      </div>
-    </nav>
+    <>
+      <nav aria-label="Primary" className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[#e3e7df] bg-white/95 backdrop-blur">
+        <div className="grid grid-cols-5">
+          {tabs.map(([to, label, Icon]) => {
+            const active = pathname === to || (to !== '/' && pathname.startsWith(to))
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center gap-1 py-2.5 text-[11px] ${active ? 'text-[#356549] font-semibold' : 'text-[#7e8b82]'}`}
+              >
+                <Icon size={19} />
+                {label}
+              </NavLink>
+            )
+          })}
+          <button
+            aria-label="More sections"
+            onClick={() => setMore(true)}
+            className={`flex flex-col items-center gap-1 py-2.5 text-[11px] ${rest.some(([to]) => pathname === to || pathname.startsWith(to + '/')) ? 'text-[#356549] font-semibold' : 'text-[#7e8b82]'}`}
+          >
+            <MoreHorizontal size={19} />
+            More
+          </button>
+        </div>
+      </nav>
+      {more && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="More sections">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMore(false)} />
+          <div className="absolute bottom-0 inset-x-0 rounded-t-3xl bg-white p-4 pb-10">
+            <div className="w-10 h-1 rounded-full bg-[#e2e7dd] mx-auto mb-3" />
+            {rest.map(([to, label, Icon]) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setMore(false)}
+                className="flex items-center gap-3 px-2 py-3 text-[15px] text-[#293b35] border-b border-[#edf0e7] last:border-0"
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

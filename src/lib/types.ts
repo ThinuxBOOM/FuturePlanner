@@ -15,9 +15,17 @@ export interface Transaction {
   id: UUID; user_id: string; date: string; kind: 'income' | 'expense' | 'transfer' | 'refund' | 'payment';
   amount: number; amount_minor: number | null; interest_minor: number | null;
   account_id: UUID; to_account_id: UUID | null;
-  category_id: UUID | null; goal_id: UUID | null; notes: string | null;
+  category_id: UUID | null; goal_id: UUID | null; notes: string | null; occurrence: string | null;
 }
-export interface Budget { id: UUID; user_id: string; month: string; category_id: UUID; planned_amount: number; rollover: boolean; notes: string | null }
+export interface Budget { id: UUID; user_id: string; month: string; category_id: UUID; planned_amount: number; rollover: boolean; notes: string | null; carry_override: number | null }
+export interface IncomePlan { id: UUID; user_id: string; month: string; amount: number }
+export interface Schedule {
+  id: UUID; user_id: string; name: string; kind: 'income' | 'expense' | 'transfer' | 'refund' | 'payment';
+  amount_minor: number; account_id: UUID; to_account_id: UUID | null; category_id: UUID | null;
+  interest_minor: number; start_date: string; end_date: string | null; frequency: 'once' | 'weekly' | 'monthly' | 'yearly';
+  active: boolean;
+}
+export interface GoalEntry { id: UUID; user_id: string; goal_id: UUID; amount_minor: number; date: string; notes: string | null }
 export interface InfraItem {
   id: UUID; user_id: string; order_n: number; name: string; spec_notes: string | null; trigger_text: string | null;
   est_min: number | null; est_max: number | null; status: string; purchased_amount: number | null; purchased_at: string | null; goal_id: UUID | null;

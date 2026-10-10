@@ -17,6 +17,7 @@ const Infrastructure = lazy(() => import('./pages/Infrastructure'))
 const Plan = lazy(() => import('./pages/Plan'))
 const Review = lazy(() => import('./pages/Review'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Schedules = lazy(() => import('./pages/Schedules'))
 
 const qc = new QueryClient()
 
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/" element={<Guard><Layout /></Guard>}>
                 <Route index element={<Dashboard />} />
                 <Route path="transactions" element={<Transactions />} />
+                <Route path="schedules" element={<Suspense fallback={<LazyFallback />}><Schedules /></Suspense>} />
                 <Route path="budgets" element={<Budgets />} />
                 <Route path="goals" element={<Goals />} />
                 <Route path="goals/:id" element={<GoalDetail />} />

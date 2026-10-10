@@ -95,3 +95,98 @@ export function balancesMinor(
   }
   return out
 }
+
+/** Shift a YYYY-MM month key by n months. */
+export function shiftMonthKey(m: string, n: number): string {
+  const [y, k] = m.split('-').map(Number)
+  const d = new Date(Date.UTC(y, k - 1 + n, 1))
+  return d.toISOString().slice(0, 7)
+}
+
+export interface BudgetLine { category_id: string; month: string; planned_amount: number | string; carry_override?: number | string | null }
+export interface CategoryRef { id: string; name: string }
+export interface RolloverRow {
+  categoryId: string; name: string; planned: number; spent: number;
+  carry: number; available: number; remaining: number; override: number | null;
+}
+
+/**
+ * Pocket-Plan rollover, in minor units: unused amounts and overspending carry
+ * forward month to month; an explicit carryOverride resets the starting carry.
+ * Editing history recalculates everything downstream.
+ */
+export function budgetRollover(
+  lines: BudgetLine[],
+  txs: MinorTx[],
+  cats: CategoryRef[],
+  targetMonth: string, // YYYY-MM
+): RolloverRow[] {
+  const spendByMonth = new Map<string, number>()
+  for (const t of txs) {
+    if (!t.category_id) continue
+    const key = `${t.category_id}@${t.date.slice(0, 7)}`
+    spendByMonth.set(key, (spendByMonth.get(key) ?? 0) + spendingMinor(t))
+  }
+  const plans = new Map(lines.map(b => [`${b.category_id}@${b.month.slice(0, 7)}`, b]))
+  return [...cats].map(c => {
+    const months = [
+      ...lines.filter(b => b.category_id === c.id).map(b => b.month.slice(0, 7)),
+      ...txs.filter(t => t.category_id === c.id).map(t => t.date.slice(0, 7)),
+      targetMonth,
+    ].filter(mm => mm <= targetMonth).sort()
+    let carry = 0
+    let row: RolloverRow = { categoryId: c.id, name: c.name, planned: 0, spent: 0, carry: 0, available: 0, remaining: 0, override: null }
+    for (let m = months[0]; m <= targetMonth; m = shiftMonthKey(m, 1)) {
+      const b = plans.get(`${c.id}@${m}`)
+      const rawOv = b?.carry_override
+      const ov = rawOv === null || rawOv === undefined || rawOv === '' ? null : Math.round(Number(rawOv) * 100)
+      if (ov !== null) carry = ov
+      const spent = spendByMonth.get(`${c.id}@${m}`) ?? 0
+      const planned = b ? Math.round(Number(b.planned_amount) * 100) : 0
+      row = { categoryId: c.id, name: c.name, planned, spent, carry, available: carry + planned, remaining: carry + planned - spent, override: ov }
+      carry = row.remaining
+    }
+    return row
+  })
+}
+
+export interface SchedRow {
+  id: string; name: string; kind: TxKind; amount_minor: number;
+  account_id: string; to_account_id: string | null; category_id: string | null;
+  interest_minor: number; start_date: string; end_date: string | null;
+  frequency: 'once' | 'weekly' | 'monthly' | 'yearly'; active: boolean;
+}
+
+export interface Occurrence extends SchedRow { due: string; key: string; paid: boolean }
+
+/** nth due date for a schedule (monthly clamps to short months, then resumes). */
+export function dueDateFor(r: SchedRow, n: number): string | null {
+  if (r.frequency === 'once') return n === 0 ? r.start_date : null
+  if (r.frequency === 'weekly') {
+    const d = new Date(Date.parse(r.start_date) + n * 7 * 86400000)
+    return d.toISOString().slice(0, 10)
+  }
+  const m = shiftMonthKey(r.start_date.slice(0, 7), n * (r.frequency === 'yearly' ? 12 : 1))
+  const [y, k] = m.split('-').map(Number)
+  const day = Math.min(Number(r.start_date.slice(8, 10)), new Date(Date.UTC(y, k, 0)).getUTCDate())
+  return `${m}-${String(day).padStart(2, '0')}`
+}
+
+/** Upcoming occurrences through a date; paid flags come from tx occurrence keys. */
+export function occurrences(
+  scheds: SchedRow[],
+  txs: { occurrence?: string | null }[],
+  through: string,
+): Occurrence[] {
+  const paid = new Set(txs.map(t => t.occurrence).filter(Boolean) as string[])
+  const out: Occurrence[] = []
+  for (const r of scheds.filter(s => s.active)) {
+    for (let n = 0; n < 600; n++) {
+      const due = dueDateFor(r, n)
+      if (!due || due > through || (r.end_date && due > r.end_date)) break
+      const key = `${r.id}@${due}`
+      out.push({ ...r, due, key, paid: paid.has(key) })
+    }
+  }
+  return out.sort((a, b) => a.due.localeCompare(b.due))
+}
